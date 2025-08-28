@@ -1,0 +1,12 @@
+{
+  "domain": "lsr",
+  "name": "ЛСР",
+  "version": "1.0.0",
+  "documentation": "https://github.com/your-repo/lsr",
+  "issue_tracker": "https://github.com/your-repo/lsr/issues",
+  "dependencies": [],
+  "codeowners": ["@your-username"],
+  "requirements": ["aiohttp>=3.8.0"],
+  "config_flow": true,
+  "iot_class": "cloud_polling"
+}

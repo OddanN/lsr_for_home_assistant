@@ -1,0 +1,52 @@
+{
+"config": {
+    "step": {
+    "user": {
+        "title": "LSR Integration Setup",
+        "description": "Enter your credentials to access the LSR API.",
+        "data": {
+        "username": "Username (phone number without +)",
+        "password": "Password",
+        "scan_interval": "Update interval (hours)"
+        }
+    }
+    },
+    "error": {
+    "auth_failed": "Authentication error: please check your username and password.",
+    "empty_credentials": "Username or password cannot be empty.",
+    "invalid_scan_interval": "Update interval must be a number between 1 and 24 hours."
+    }
+},
+"entity": {
+    "sensor": {
+    "id": {
+        "name": "{account_id} Account ID"
+    },
+    "address": {
+        "name": "{account_id} Address"
+    },
+    "payment_status": {
+        "name": "{account_id} Payment Status"
+    },
+    "number": {
+        "name": "{account_id} Account Number"
+    },
+    "notification_count": {
+        "name": "{account_id} Notification Count"
+    },
+    "camera_count": {
+        "name": "{account_id} Camera Count"
+    }
+    },
+    "camera": {
+    "camera": {
+        "name": "{title}"
+    }
+    }
+},
+"device": {
+    "communal_account": {
+    "name": "Account ID {account_number}"
+    }
+}
+}
