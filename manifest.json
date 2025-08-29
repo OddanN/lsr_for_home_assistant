@@ -1,12 +1,28 @@
 {
   "domain": "lsr",
-  "name": "ЛСР",
-  "version": "1.0.0",
-  "documentation": "https://github.com/your-repo/lsr",
-  "issue_tracker": "https://github.com/your-repo/lsr/issues",
-  "dependencies": [],
-  "codeowners": ["@your-username"],
-  "requirements": ["aiohttp>=3.8.0"],
+  "name": "LSR Integration",
+  "version": "1.0.5",
   "config_flow": true,
-  "iot_class": "cloud_polling"
+  "documentation": "https://example.com",
+  "issue_tracker": "https://github.com/username/lsr-integration/issues",
+  "dependencies": [],
+  "codeowners": ["@username"],
+  "requirements": ["aiohttp>=3.8.0"],
+  "iot_class": "local_polling",
+  "after_dependencies": [],
+  "integration_type": "hub",
+  "is_built_in": false,
+  "quality_scale": "platinum",
+  "homeassistant": "2023.12.0",
+  "dhcp": [],
+  "bluetooth": [],
+  "zeroconf": [],
+  "ssdp": [],
+  "usb": [],
+  "loggers": ["custom_components.lsr"],
+  "platforms": [
+    "sensor",
+    "button",
+    "camera"
+  ]
 }

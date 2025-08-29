@@ -20,7 +20,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """set up the LSR camera platform.
+    """Set up the LSR camera platform.
 
     Args:
         hass (HomeAssistant): The Home Assistant instance.
@@ -74,7 +74,7 @@ class LSRCamera(Camera):
         entity_id: str,
         unique_id: str,
     ) -> None:
-        """initialize the camera.
+        """Initialize the camera.
 
         Args:
             coordinator (LSRDataUpdateCoordinator): The data coordinator for the integration.
