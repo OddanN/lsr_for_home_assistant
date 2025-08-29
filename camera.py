@@ -1,13 +1,10 @@
-# Version: 1.0.1
+# Version: 1.0.3
 """Custom component for LSR integration, providing camera entities."""
 
 import logging
-import aiohttp
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import DiscoveryInfoType
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
@@ -18,14 +15,14 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities,
 ) -> None:
     """Set up the LSR camera platform.
 
     Args:
         hass (HomeAssistant): The Home Assistant instance.
         entry (ConfigEntry): The configuration entry for the integration.
-        async_add_entities (AddEntitiesCallback): Callback to add entities to Home Assistant.
+        async_add_entities: Callback to add entities to Home Assistant.
     """
     coordinator = hass.data[DOMAIN][entry.entry_id]
     entities = []
@@ -134,8 +131,12 @@ class LSRCamera(Camera):
         is_available = bool(self._stream_url)
         return is_available
 
-    async def async_camera_image(self) -> bytes | None:
+    async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
         """Return bytes of camera image.
+
+        Args:
+            width (int | None): The requested width of the image.
+            height (int | None): The requested height of the image.
 
         Returns:
             bytes | None: The image data if successful, none otherwise.
@@ -230,8 +231,12 @@ class LSRMainPassQRCamera(Camera):
         """
         return bool(self._qr_url)
 
-    async def async_camera_image(self) -> bytes | None:
+    async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
         """Return bytes of QR code image.
+
+        Args:
+            width (int | None): The requested width of the image.
+            height (int | None): The requested height of the image.
 
         Returns:
             bytes | None: The image data if successful, none otherwise.

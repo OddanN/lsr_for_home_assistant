@@ -5,7 +5,7 @@
   "config_flow": true,
   "documentation": "https://example.com",
   "issue_tracker": "https://github.com/username/lsr-integration/issues",
-  "dependencies": [],
+  "dependencies": {},
   "codeowners": ["@username"],
   "requirements": ["aiohttp>=3.8.0"],
   "iot_class": "local_polling",

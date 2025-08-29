@@ -1,19 +1,19 @@
-# Version: 1.0.7
+# Version: 1.0.8
 """Custom component for LSR integration, managing data updates and authentication."""
 
-from datetime import timedelta
+from datetime import timedelta, datetime
 import logging
 import uuid
 import re
 import asyncio
-from typing import Dict, List
+from typing import Dict
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from .const import DOMAIN
+from .const import DOMAIN, NAMESPACE
 from .api_client import authenticate, get_accounts, get_account_data, get_cameras, get_communal_requests, get_meters, get_meter_history, get_camera_stream_url
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,59 +45,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             detailed_data = {}
             for account in accounts_data:
                 account_id = account["objectId"]["id"]
-                account_data = await get_account_data(self.session, self.access_token, account_id)
-                communal_requests = await get_communal_requests(self.session, self.access_token, account_id)
-                cameras_data = await get_cameras(self.session, self.access_token, account_id)
-                meters_data = await get_meters(self.session, self.access_token, account_id)
-                main_pass_data = await self.async_get_main_pass_data(account_id)
-                guest_passes_data = await self.async_get_guest_passes(account_id)
-
-                # Fetch meter history
-                meters_history = {}
-                for meter in meters_data:
-                    meter_id = meter["objectId"]["id"]
-                    history_items = await get_meter_history(self.session, self.access_token, meter_id)
-                    history_dict = {}
-                    for history_item in history_items:
-                        if history_item["value1"]["value"]:
-                            date_str = history_item["dateList"]
-                            value = float(history_item["value1"]["value"].replace(",", "."))
-                            history_dict[date_str] = value
-                    last_value_raw = meter.get("lastMeterValue", {}).get("listValue")
-                    last_date = meter.get("lastMeterValue", {}).get("dateList")
-                    if last_value_raw and last_date:
-                        history_dict[last_date] = float(last_value_raw.replace(",", "."))
-                    meters_history[meter_id] = {
-                        "title": meter["objectId"]["title"],
-                        "type_id": meter["type"]["id"],
-                        "type_title": meter["type"]["title"],
-                        "history": sorted([(date_str, value) for date_str, value in history_dict.items()], key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"))
-                    }
-
-                # Fetch camera stream URLs
-                headers = {"Authorization": f"Bearer {self.access_token}"}
-                tasks = [self._get_camera_stream_url(camera, headers) for camera in cameras_data]
-                await asyncio.gather(*tasks)
-
-                address = account_data.get("optionalObject", {}).get("rows", [{}])[0].get("cells", [{}])[0].get("value", "Unknown")
-                address = re.search(r"Л/с №(\d+)", address).group(1) if address and re.search(r"Л/с №(\d+)", address) else "Unknown"
-                if not address or address.strip() == "":
-                    _LOGGER.warning("Address for account %s is empty or invalid, setting to 'Unknown'", account_id)
-                    address = "Unknown"
-                detailed_data[account_id] = {
-                    "id": account_id,
-                    "address": address,
-                    "payment_status": self._extract_payment_status(account_data.get("optionalObject", {})),
-                    "number": account["objectId"]["title"],
-                    "notification_count": account_data.get("notificationCount", 0),
-                    "camera_count": len(cameras_data),
-                    "cameras": cameras_data,
-                    "accruals": account_data.get("items", []),  # Данные начислений
-                    "communal_requests": communal_requests,  # Данные коммунальных запросов
-                    "meters": meters_history,  # Данные метров и их истории
-                    "main_pass": main_pass_data,  # Данные пропуска
-                    "guest_passes": guest_passes_data,  # Данные гостевых пропусков
-                }
+                account_data = await self.async_fetch_account_data(account_id, include_cameras=True, include_main_pass=True, include_guest_passes=True)
+                detailed_data[account_id] = account_data
             _LOGGER.debug("Fetched data: %s", detailed_data)
             return detailed_data
         except Exception as err:
@@ -112,51 +61,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             detailed_data = {}
             for account in accounts_data:
                 account_id = account["objectId"]["id"]
-                account_data = await get_account_data(self.session, self.access_token, account_id)
-                communal_requests = await get_communal_requests(self.session, self.access_token, account_id)
-                meters_data = await get_meters(self.session, self.access_token, account_id)
-
-                # Fetch meter history
-                meters_history = {}
-                for meter in meters_data:
-                    meter_id = meter["objectId"]["id"]
-                    history_items = await get_meter_history(self.session, self.access_token, meter_id)
-                    history_dict = {}
-                    for history_item in history_items:
-                        if history_item["value1"]["value"]:
-                            date_str = history_item["dateList"]
-                            value = float(history_item["value1"]["value"].replace(",", "."))
-                            history_dict[date_str] = value
-                    last_value_raw = meter.get("lastMeterValue", {}).get("listValue")
-                    last_date = meter.get("lastMeterValue", {}).get("dateList")
-                    if last_value_raw and last_date:
-                        history_dict[last_date] = float(last_value_raw.replace(",", "."))
-                    meters_history[meter_id] = {
-                        "title": meter["objectId"]["title"],
-                        "type_id": meter["type"]["id"],
-                        "type_title": meter["type"]["title"],
-                        "history": sorted([(date_str, value) for date_str, value in history_dict.items()], key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"))
-                    }
-
-                address = account_data.get("optionalObject", {}).get("rows", [{}])[0].get("cells", [{}])[0].get("value", "Unknown")
-                address = re.search(r"Л/с №(\d+)", address).group(1) if address and re.search(r"Л/с №(\d+)", address) else "Unknown"
-                if not address or address.strip() == "":
-                    _LOGGER.warning("Address for account %s is empty or invalid, setting to 'Unknown'", account_id)
-                    address = "Unknown"
-                detailed_data[account_id] = {
-                    "id": account_id,
-                    "address": address,
-                    "payment_status": self._extract_payment_status(account_data.get("optionalObject", {})),
-                    "number": account["objectId"]["title"],
-                    "notification_count": account_data.get("notificationCount", 0),
-                    "camera_count": 0,  # Placeholder, cameras not updated here
-                    "cameras": [],  # Placeholder, cameras not updated here
-                    "accruals": account_data.get("items", []),  # Данные начислений
-                    "communal_requests": communal_requests,  # Данные коммунальных запросов
-                    "meters": meters_history,  # Данные метров и их истории
-                    "main_pass": {},  # Placeholder, main pass not updated here
-                    "guest_passes": {},  # Placeholder, guest passes not updated here
-                }
+                account_data = await self.async_fetch_account_data(account_id, include_cameras=False, include_main_pass=False, include_guest_passes=False)
+                detailed_data[account_id] = account_data
             self.data = detailed_data
             _LOGGER.debug("Force updated sensor data: %s", self.data)
         except Exception as err:
@@ -215,7 +121,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
         payload = {
             "data": {"communalAccountId": account_id},
             "method": "GetMainPassData",
-            "namespace": "http://www.lsr.ru/estate/headlessCMS",
+            "namespace": NAMESPACE,
             "operation": "REQUEST",
             "parameters": {"Authorization": f"Bearer {self.access_token}"}
         }
@@ -251,7 +157,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 "pageQuery": None
             },
             "method": "GetObjectList",
-            "namespace": "http://www.lsr.ru/estate/headlessCMS",
+            "namespace": NAMESPACE,
             "operation": "REQUEST",
             "parameters": {"Authorization": f"Bearer {self.access_token}"}
         }
@@ -266,3 +172,53 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error("Error fetching guest passes data for account %s: %s", account_id, err)
             return {}
+
+    async def async_fetch_account_data(self, account_id: str, include_cameras: bool = False, include_main_pass: bool = False, include_guest_passes: bool = False) -> Dict:
+        """Fetch account data with optional inclusions."""
+        account_data = await get_account_data(self.session, self.access_token, account_id)
+        communal_requests = await get_communal_requests(self.session, self.access_token, account_id)
+        meters_data = await get_meters(self.session, self.access_token, account_id)
+
+        # Fetch meter history
+        meters_history = {}
+        for meter in meters_data:
+            meter_id = meter["objectId"]["id"]
+            history_items = await get_meter_history(self.session, self.access_token, meter_id)
+            history_dict = {}
+            for history_item in history_items:
+                if history_item["value1"]["value"]:
+                    date_str = history_item["dateList"]
+                    value = float(history_item["value1"]["value"].replace(",", "."))
+                    history_dict[date_str] = value
+            last_value_raw = meter.get("lastMeterValue", {}).get("listValue")
+            last_date = meter.get("lastMeterValue", {}).get("dateList")
+            if last_value_raw and last_date:
+                history_dict[last_date] = float(last_value_raw.replace(",", "."))
+            meters_history[meter_id] = {
+                "title": meter["objectId"]["title"],
+                "type_id": meter["type"]["id"],
+                "type_title": meter["type"]["title"],
+                "history": sorted([(date_str, value) for date_str, value in history_dict.items()], key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"))
+            }
+
+        address = account_data.get("optionalObject", {}).get("rows", [{}])[0].get("cells", [{}])[0].get("value", "Unknown")
+        address = re.search(r"Л/с №(\d+)", address).group(1) if address and re.search(r"Л/с №(\d+)", address) else "Unknown"
+        if not address or address.strip() == "":
+            _LOGGER.warning("Address for account %s is empty or invalid, setting to 'Unknown'", account_id)
+            address = "Unknown"
+
+        result = {
+            "id": account_id,
+            "address": address,
+            "payment_status": self._extract_payment_status(account_data.get("optionalObject", {})),
+            "number": account_data["objectId"]["title"],
+            "notification_count": account_data.get("notificationCount", 0),
+            "camera_count": 0 if not include_cameras else len(await get_cameras(self.session, self.access_token, account_id)),
+            "cameras": [] if not include_cameras else await get_cameras(self.session, self.access_token, account_id),
+            "accruals": account_data.get("items", []),
+            "communal_requests": communal_requests,
+            "meters": meters_history,
+            "main_pass": {} if not include_main_pass else await self.async_get_main_pass_data(account_id),
+            "guest_passes": {} if not include_guest_passes else await self.async_get_guest_passes(account_id),
+        }
+        return result

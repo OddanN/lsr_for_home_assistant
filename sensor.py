@@ -1,10 +1,11 @@
-# Version: 1.0.15
+# Version: 1.0.18
 """Custom component for LSR integration, providing sensor entities."""
 
 import logging
 import re
 from datetime import datetime
 from typing import Union, Callable
+# noinspection PyProtectedMember
 from homeassistant.components.sensor import SensorEntity, EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -13,7 +14,6 @@ from .const import DOMAIN
 from .coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-
 
 async def async_setup_entry(
         hass: HomeAssistant,
@@ -222,15 +222,14 @@ async def async_setup_entry(
         accruals = account_data.get("accruals", [])
         if accruals:
             latest_accrual = accruals[0]
-            date_str = re.search(r">(.+)<", latest_accrual["listFields"]["rows"][0]["cells"][0]["value"]).group(1)
-            amount_str = re.search(r"Начислено (\d{1,}\.?\d{0,2}₽)",
+            amount_str = re.search(r"Начислено (\d+\.?\d{0,2}₽)",
                                    latest_accrual["listFields"]["rows"][0]["cells"][1]["value"]).group(1)
             amount = float(amount_str.replace("₽", "").replace(",", "."))
             sensor_payment_due = f"sensor.lsr_{account_id}_payment_due".lower().replace("-", "_")
             extra_attributes = {
                 accrual["objectId"]["id"]: {
                     "date": re.search(r">(.+)<", accrual["listFields"]["rows"][0]["cells"][0]["value"]).group(1),
-                    "amount": re.search(r"Начислено (\d{1,}\.?\d{0,2}₽)",
+                    "amount": re.search(r"Начислено (\d+\.?\d{0,2}₽)",
                                         accrual["listFields"]["rows"][0]["cells"][1]["value"]).group(1)
                 } for accrual in accruals
             }
@@ -273,8 +272,7 @@ async def async_setup_entry(
             )
 
         # New sensor for guest passes
-        guest_passes = account_data.get("guest_passes", {})
-        if guest_passes:
+        if account_data.get("guest_passes", {}):
             sensor_guestpass = f"sensor.lsr_{account_id}_guestpass".lower().replace("-", "_")
             entities.append(
                 LSRSensor(
@@ -282,7 +280,7 @@ async def async_setup_entry(
                     coordinator,
                     account_id,
                     "guestpass",
-                    guest_passes.get("count", 0),
+                    account_data.get("guest_passes", {}).get("count", 0),
                     "guestpass",
                     "mdi:ticket",
                     entity_id=sensor_guestpass,
@@ -291,7 +289,7 @@ async def async_setup_entry(
                     extra_attributes={
                         "passes": [
                             f"Тип: {pass_data['strategy']['title']}. С {datetime.fromtimestamp(pass_data['dateFrom']).strftime('%d.%m.%Y')} по {datetime.fromtimestamp(pass_data['dateTo']).strftime('%d.%m.%Y')}. Пин-код: {pass_data['pin']}. QR-код: {pass_data['qr']}"
-                            for pass_data in guest_passes.get("items", [])
+                            for pass_data in account_data.get("guest_passes", {}).get("items", [])
                         ]
                     }
                 )
@@ -299,7 +297,6 @@ async def async_setup_entry(
 
     async_add_entities(entities)
     _LOGGER.debug("Added %s sensor entities", len(entities))
-
 
 class LSRSensor(SensorEntity):
     """Representation of an LSR sensor.
@@ -438,6 +435,5 @@ class LSRSensor(SensorEntity):
                 "qr": main_pass.get("qr", "")
             })
         elif self._sensor_type == "guestpass":
-            guest_passes = self._coordinator.data.get(self._account_id, {}).get("guest_passes", {})
             base_attributes.update(self._attr_extra_state_attributes or {})
         return base_attributes
