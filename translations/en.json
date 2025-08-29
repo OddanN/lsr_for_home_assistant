@@ -1,52 +1,39 @@
 {
-"config": {
+  "title": "LSR",
+  "config": {
     "step": {
-    "user": {
-        "title": "LSR Integration Setup",
-        "description": "Enter your credentials to access the LSR API.",
+      "user": {
+        "title": "Configure LSR Integration",
+        "description": "Enter your LSR credentials to connect.",
         "data": {
-        "username": "Username (phone number without +)",
-        "password": "Password",
-        "scan_interval": "Update interval (hours)"
+          "username": "Username",
+          "password": "Password",
+          "app_instance_id": "App Instance ID"
         }
-    }
+      }
     },
     "error": {
-    "auth_failed": "Authentication error: please check your username and password.",
-    "empty_credentials": "Username or password cannot be empty.",
-    "invalid_scan_interval": "Update interval must be a number between 1 and 24 hours."
+      "invalid_auth": "Invalid authentication credentials.",
+      "unknown": "Unknown error occurred."
+    },
+    "abort": {
+      "already_configured": "LSR is already configured."
     }
-},
-"entity": {
+  },
+  "entity": {
     "sensor": {
-    "id": {
-        "name": "{account_id} Account ID"
-    },
-    "address": {
-        "name": "{account_id} Address"
-    },
-    "payment_status": {
-        "name": "{account_id} Payment Status"
-    },
-    "number": {
-        "name": "{account_id} Account Number"
-    },
-    "notification_count": {
-        "name": "{account_id} Notification Count"
-    },
-    "camera_count": {
-        "name": "{account_id} Camera Count"
+      "account_address": "Account Address",
+      "payment_status": "Payment Status",
+      "notification_count": "Notification Count",
+      "camera_count": "Camera Count",
+      "meter_count": "Meter Count",
+      "meter_value": "Meter Reading",
+      "meter_title": "Meter Title",
+      "meter_poverka": "Meter Verification Date",
+      "communalrequest_count_total": "Total Communal Requests",
+      "communalrequest_count_done": "Completed Communal Requests",
+      "communalrequest_count_atwork": "In Progress Communal Requests",
+      "communalrequest_count_onhold": "On Hold Communal Requests"
     }
-    },
-    "camera": {
-    "camera": {
-        "name": "{title}"
-    }
-    }
-},
-"device": {
-    "communal_account": {
-    "name": "Account ID {account_number}"
-    }
-}
+  }
 }

@@ -1,52 +1,39 @@
 {
-"config": {
+  "title": "ЛСР",
+  "config": {
     "step": {
-    "user": {
-        "title": "Настройка интеграции LSR",
-        "description": "Введите ваши учетные данные для доступа к API LSR.",
+      "user": {
+        "title": "Настройка интеграции ЛСР",
+        "description": "Введите учетные данные ЛСР для подключения.",
         "data": {
-        "username": "Логин (номер телефона без +)",
-        "password": "Пароль",
-        "scan_interval": "Период обновления (часы)"
+          "username": "Имя пользователя",
+          "password": "Пароль",
+          "app_instance_id": "ID экземпляра приложения"
         }
-    }
+      }
     },
     "error": {
-    "auth_failed": "Ошибка авторизации: проверьте логин и пароль.",
-    "empty_credentials": "Логин или пароль не могут быть пустыми.",
-    "invalid_scan_interval": "Период обновления должен быть числом от 1 до 24 часов."
+      "invalid_auth": "Неверные учетные данные для аутентификации.",
+      "unknown": "Произошла неизвестная ошибка."
+    },
+    "abort": {
+      "already_configured": "Интеграция ЛСР уже настроена."
     }
-},
-"entity": {
+  },
+  "entity": {
     "sensor": {
-    "id": {
-        "name": "{account_id} ID счета"
-    },
-    "address": {
-        "name": "{account_id} Адрес"
-    },
-    "payment_status": {
-        "name": "{account_id} Статус платежа"
-    },
-    "number": {
-        "name": "{account_id} Номер счета"
-    },
-    "notification_count": {
-        "name": "{account_id} Количество уведомлений"
-    },
-    "camera_count": {
-        "name": "{account_id} Количество камер"
+      "account_address": "Адрес счета",
+      "payment_status": "Статус оплаты",
+      "notification_count": "Количество уведомлений",
+      "camera_count": "Количество камер",
+      "meter_count": "Количество счетчиков",
+      "meter_value": "Показания счетчика",
+      "meter_title": "Название счетчика",
+      "meter_poverka": "Дата поверки счетчика",
+      "communalrequest_count_total": "Общее количество заявок",
+      "communalrequest_count_done": "Завершенные заявки",
+      "communalrequest_count_atwork": "Заявки в работе",
+      "communalrequest_count_onhold": "Заявки на паузе"
     }
-    },
-    "camera": {
-    "camera": {
-        "name": "{title}"
-    }
-    }
-},
-"device": {
-    "communal_account": {
-    "name": "Счет ID {account_number}"
-    }
-}
+  }
 }
