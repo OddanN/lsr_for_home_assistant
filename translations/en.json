@@ -33,7 +33,8 @@
       "communalrequest_count_total": "Total Communal Requests",
       "communalrequest_count_done": "Completed Communal Requests",
       "communalrequest_count_atwork": "In Progress Communal Requests",
-      "communalrequest_count_onhold": "On Hold Communal Requests"
+      "communalrequest_count_onhold": "On Hold Communal Requests",
+      "payment_due": "Payment Due"
     }
   }
 }

@@ -1,4 +1,4 @@
-# Version: 1.0.5
+# Version: 1.0.6
 """API client for LSR integration.
 
 This module provides functions to handle API requests to https://mp.lsr.ru/api/rpc.
@@ -123,7 +123,7 @@ async def get_accounts(session: aiohttp.ClientSession, access_token: str) -> Lis
         raise
 
 async def get_account_data(session: aiohttp.ClientSession, access_token: str, account_id: str) -> Dict:
-    """Get detailed data for a specific account.
+    """Get detailed data for a specific account, including accruals.
 
     Args:
         session (aiohttp.ClientSession): The HTTP session to use for the request.
@@ -131,7 +131,7 @@ async def get_account_data(session: aiohttp.ClientSession, access_token: str, ac
         account_id (str): The ID of the account to retrieve data for.
 
     Returns:
-        Dict: Account data.
+        Dict: Account data including accruals.
 
     Raises:
         aiohttp.ClientError: If the API request fails.
@@ -142,8 +142,27 @@ async def get_account_data(session: aiohttp.ClientSession, access_token: str, ac
         "Content-Type": "application/json",
     }
     payload = {
-        "data": {"communalAccountId": account_id},
-        "method": "GetCommunalAccountData",
+        "data": {
+            "type": "CommunalAccountAccrual",
+            "query": {
+                "conditions": [
+                    {
+                        "property": "communalAccountId",
+                        "value": [account_id],
+                        "comparisonOperator": "="
+                    },
+                    {
+                        "property": "date",
+                        "value": [1739952085],  # Example timestamp, adjust as needed
+                        "comparisonOperator": ">="
+                    }
+                ],
+                "sort": [],
+                "lastEditedPropertyType": None,
+            },
+            "pageQuery": None,
+        },
+        "method": "GetObjectList",
         "namespace": NAMESPACE,
         "operation": "REQUEST",
         "parameters": {"Authorization": f"Bearer {access_token}"},

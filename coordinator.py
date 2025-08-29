@@ -1,4 +1,4 @@
-# Version: 1.0.0
+# Version: 1.0.3
 """Custom component for LSR integration, managing data updates and authentication."""
 
 from datetime import timedelta
@@ -6,7 +6,7 @@ import logging
 import uuid
 import re
 import asyncio
-from typing import Dict
+from typing import Dict, List
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
@@ -14,7 +14,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .const import DOMAIN
-from .api_client import authenticate, get_accounts, get_account_data, get_cameras, get_camera_stream_url
+from .api_client import authenticate, get_accounts, get_account_data, get_cameras, get_communal_requests, get_meters, get_meter_history, get_camera_stream_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,19 +46,53 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             for account in accounts_data:
                 account_id = account["objectId"]["id"]
                 account_data = await get_account_data(self.session, self.access_token, account_id)
+                communal_requests = await get_communal_requests(self.session, self.access_token, account_id)
                 cameras_data = await get_cameras(self.session, self.access_token, account_id)
-                address = account_data.get("address", "Unknown")
+                meters_data = await get_meters(self.session, self.access_token, account_id)
+
+                # Fetch meter history
+                meters_history = {}
+                for meter in meters_data:
+                    meter_id = meter["objectId"]["id"]
+                    history_items = await get_meter_history(self.session, self.access_token, meter_id)
+                    history_dict = {}
+                    for history_item in history_items:
+                        if history_item["value1"]["value"]:
+                            date_str = history_item["dateList"]
+                            value = float(history_item["value1"]["value"].replace(",", "."))
+                            history_dict[date_str] = value
+                    last_value_raw = meter.get("lastMeterValue", {}).get("listValue")
+                    last_date = meter.get("lastMeterValue", {}).get("dateList")
+                    if last_value_raw and last_date:
+                        history_dict[last_date] = float(last_value_raw.replace(",", "."))
+                    meters_history[meter_id] = {
+                        "title": meter["objectId"]["title"],
+                        "type_id": meter["type"]["id"],
+                        "type_title": meter["type"]["title"],
+                        "history": sorted([(date_str, value) for date_str, value in history_dict.items()], key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"))
+                    }
+
+                # Fetch camera stream URLs
+                headers = {"Authorization": f"Bearer {self.access_token}"}
+                tasks = [self._get_camera_stream_url(camera, headers) for camera in cameras_data]
+                await asyncio.gather(*tasks)
+
+                address = account_data.get("optionalObject", {}).get("rows", [{}])[0].get("cells", [{}])[0].get("value", "Unknown")
+                address = re.search(r"Л/с №(\d+)", address).group(1) if address and re.search(r"Л/с №(\d+)", address) else "Unknown"
                 if not address or address.strip() == "":
                     _LOGGER.warning("Address for account %s is empty or invalid, setting to 'Unknown'", account_id)
                     address = "Unknown"
                 detailed_data[account_id] = {
                     "id": account_id,
                     "address": address,
-                    "payment_status": self._extract_payment_status(account_data.get("titleCustomFields", {})),
+                    "payment_status": self._extract_payment_status(account_data.get("optionalObject", {})),
                     "number": account["objectId"]["title"],
                     "notification_count": account_data.get("notificationCount", 0),
                     "camera_count": len(cameras_data),
                     "cameras": cameras_data,
+                    "accruals": account_data.get("items", []),  # Данные начислений
+                    "communal_requests": communal_requests,  # Данные коммунальных запросов
+                    "meters": meters_history  # Данные метров и их истории
                 }
             _LOGGER.debug("Fetched data: %s", detailed_data)
             return detailed_data

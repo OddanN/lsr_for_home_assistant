@@ -33,7 +33,8 @@
       "communalrequest_count_total": "Общее количество заявок",
       "communalrequest_count_done": "Завершенные заявки",
       "communalrequest_count_atwork": "Заявки в работе",
-      "communalrequest_count_onhold": "Заявки на паузе"
+      "communalrequest_count_onhold": "Заявки на паузе",
+      "payment_due": "Счета для оплаты"
     }
   }
 }
