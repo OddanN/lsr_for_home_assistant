@@ -1,12 +1,11 @@
-# Version: 1.0.12
+# Version: 1.0.15
 """Custom component for LSR integration, providing sensor entities."""
 
 import logging
 import re
 from datetime import datetime
 from typing import Union, Callable
-from homeassistant.components.sensor import SensorEntity, \
-    EntityCategory  # EntityCategory is part of the official API, ignore __all__ warning if persists
+from homeassistant.components.sensor import SensorEntity, EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
@@ -19,7 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
         hass: HomeAssistant,
         entry: ConfigEntry,
-        async_add_entities: Callable[[list], None],  # AddEntitiesCallback type
+        async_add_entities: Callable[[list], None],
 ) -> None:
     """Set up the LSR sensor platform.
 
@@ -251,6 +250,53 @@ async def async_setup_entry(
                 )
             )
 
+        # New sensor for main pass PIN
+        main_pass = account_data.get("main_pass", {})
+        if main_pass:
+            sensor_mainpass_pin = f"sensor.lsr_{account_id}_mainpass_pin".lower().replace("-", "_")
+            entities.append(
+                LSRSensor(
+                    hass,
+                    coordinator,
+                    account_id,
+                    "mainpass-pin",
+                    main_pass.get("pin", ""),
+                    "mainpass_pin",
+                    "mdi:lock",
+                    entity_id=sensor_mainpass_pin,
+                    unique_id=sensor_mainpass_pin,
+                    extra_attributes={
+                        "text": main_pass.get("text", ""),
+                        "qr": main_pass.get("qr", "")
+                    }
+                )
+            )
+
+        # New sensor for guest passes
+        guest_passes = account_data.get("guest_passes", {})
+        if guest_passes:
+            sensor_guestpass = f"sensor.lsr_{account_id}_guestpass".lower().replace("-", "_")
+            entities.append(
+                LSRSensor(
+                    hass,
+                    coordinator,
+                    account_id,
+                    "guestpass",
+                    guest_passes.get("count", 0),
+                    "guestpass",
+                    "mdi:ticket",
+                    entity_id=sensor_guestpass,
+                    unique_id=sensor_guestpass,
+                    state_class="measurement",
+                    extra_attributes={
+                        "passes": [
+                            f"Тип: {pass_data['strategy']['title']}. С {datetime.fromtimestamp(pass_data['dateFrom']).strftime('%d.%m.%Y')} по {datetime.fromtimestamp(pass_data['dateTo']).strftime('%d.%m.%Y')}. Пин-код: {pass_data['pin']}. QR-код: {pass_data['qr']}"
+                            for pass_data in guest_passes.get("items", [])
+                        ]
+                    }
+                )
+            )
+
     async_add_entities(entities)
     _LOGGER.debug("Added %s sensor entities", len(entities))
 
@@ -306,8 +352,8 @@ class LSRSensor(SensorEntity):
         self._state = state if state is not None else (
             0 if sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
                                  "communalrequest-count-done", "communalrequest-count-atwork",
-                                 "communalrequest-count-onhold",
-                                 "communalrequest-count-waitingforregistration"] else "Unknown")
+                                 "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
+                                 "guestpass"] else "Unknown")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._account_id)},
             name=f"Счет ID {self._account_id}",
@@ -345,6 +391,10 @@ class LSRSensor(SensorEntity):
         Returns:
             str: The translated name of the sensor.
         """
+        if self._sensor_type == "mainpass_pin":
+            return "Домофон Пин-код"
+        elif self._sensor_type == "guestpass":
+            return "Гостевые пропуска"
         return self.hass.config.localized_string(self._attr_name) or self._attr_name
 
     @property
@@ -357,7 +407,8 @@ class LSRSensor(SensorEntity):
         state = self._coordinator.data.get(self._account_id, {}).get(self._sensor_type, self._state)
         if self._sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
                                  "communalrequest-count-done", "communalrequest-count-atwork",
-                                 "communalrequest-count-onhold", "communalrequest-count-waitingforregistration"]:
+                                 "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
+                                 "guestpass"]:
             state = int(state) if state is not None else 0
         elif self._sensor_type.endswith("-value") or self._sensor_type == "payment-due":
             state = round(float(state) if state is not None else 0.0, 4)
@@ -375,8 +426,18 @@ class LSRSensor(SensorEntity):
         Returns:
             dict: Additional attributes for the sensor entity.
         """
-        return {
+        base_attributes = {
             "account_id": self._account_id,
             "sensor_type": self._sensor_type,
             **self._attr_extra_state_attributes,
         }
+        if self._sensor_type == "mainpass-pin":
+            main_pass = self._coordinator.data.get(self._account_id, {}).get("main_pass", {})
+            base_attributes.update({
+                "text": main_pass.get("text", ""),
+                "qr": main_pass.get("qr", "")
+            })
+        elif self._sensor_type == "guestpass":
+            guest_passes = self._coordinator.data.get(self._account_id, {}).get("guest_passes", {})
+            base_attributes.update(self._attr_extra_state_attributes or {})
+        return base_attributes

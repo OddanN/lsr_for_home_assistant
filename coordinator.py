@@ -1,4 +1,4 @@
-# Version: 1.0.5
+# Version: 1.0.7
 """Custom component for LSR integration, managing data updates and authentication."""
 
 from datetime import timedelta
@@ -49,6 +49,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 communal_requests = await get_communal_requests(self.session, self.access_token, account_id)
                 cameras_data = await get_cameras(self.session, self.access_token, account_id)
                 meters_data = await get_meters(self.session, self.access_token, account_id)
+                main_pass_data = await self.async_get_main_pass_data(account_id)
+                guest_passes_data = await self.async_get_guest_passes(account_id)
 
                 # Fetch meter history
                 meters_history = {}
@@ -92,7 +94,9 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     "cameras": cameras_data,
                     "accruals": account_data.get("items", []),  # Данные начислений
                     "communal_requests": communal_requests,  # Данные коммунальных запросов
-                    "meters": meters_history  # Данные метров и их истории
+                    "meters": meters_history,  # Данные метров и их истории
+                    "main_pass": main_pass_data,  # Данные пропуска
+                    "guest_passes": guest_passes_data,  # Данные гостевых пропусков
                 }
             _LOGGER.debug("Fetched data: %s", detailed_data)
             return detailed_data
@@ -149,7 +153,9 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     "cameras": [],  # Placeholder, cameras not updated here
                     "accruals": account_data.get("items", []),  # Данные начислений
                     "communal_requests": communal_requests,  # Данные коммунальных запросов
-                    "meters": meters_history  # Данные метров и их истории
+                    "meters": meters_history,  # Данные метров и их истории
+                    "main_pass": {},  # Placeholder, main pass not updated here
+                    "guest_passes": {},  # Placeholder, guest passes not updated here
                 }
             self.data = detailed_data
             _LOGGER.debug("Force updated sensor data: %s", self.data)
@@ -202,3 +208,61 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
     async def _get_camera_stream_url(self, camera: Dict, headers: Dict) -> None:
         """Fetch stream URL for a single camera asynchronously."""
         await get_camera_stream_url(self.session, camera, headers)
+
+    async def async_get_main_pass_data(self, account_id: str) -> Dict:
+        """Fetch main pass data for the given account."""
+        headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
+        payload = {
+            "data": {"communalAccountId": account_id},
+            "method": "GetMainPassData",
+            "namespace": "http://www.lsr.ru/estate/headlessCMS",
+            "operation": "REQUEST",
+            "parameters": {"Authorization": f"Bearer {self.access_token}"}
+        }
+        try:
+            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers, timeout=10) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("statusCode") == 200:
+                        return data["data"]
+                _LOGGER.error("Failed to fetch main pass data for account %s: HTTP %s", account_id, resp.status)
+                return {}
+        except Exception as err:
+            _LOGGER.error("Error fetching main pass data for account %s: %s", account_id, err)
+            return {}
+
+    async def async_get_guest_passes(self, account_id: str) -> Dict:
+        """Fetch guest passes data for the given account."""
+        headers = {"Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
+        payload = {
+            "data": {
+                "type": "GuestPass",
+                "query": {
+                    "conditions": [
+                        {
+                            "property": "communalAccountId",
+                            "value": [account_id],
+                            "comparisonOperator": "="
+                        }
+                    ],
+                    "sort": [],
+                    "lastEditedPropertyType": None
+                },
+                "pageQuery": None
+            },
+            "method": "GetObjectList",
+            "namespace": "http://www.lsr.ru/estate/headlessCMS",
+            "operation": "REQUEST",
+            "parameters": {"Authorization": f"Bearer {self.access_token}"}
+        }
+        try:
+            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers, timeout=10) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("statusCode") == 200:
+                        return data["data"]
+                _LOGGER.error("Failed to fetch guest passes data for account %s: HTTP %s", account_id, resp.status)
+                return {}
+        except Exception as err:
+            _LOGGER.error("Error fetching guest passes data for account %s: %s", account_id, err)
+            return {}

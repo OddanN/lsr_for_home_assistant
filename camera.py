@@ -1,4 +1,4 @@
-# Version: 1.0.0
+# Version: 1.0.1
 """Custom component for LSR integration, providing camera entities."""
 
 import logging
@@ -31,8 +31,8 @@ async def async_setup_entry(
     entities = []
 
     for account_id, account_data in coordinator.data.items():
+        # Add existing cameras
         for camera in account_data.get("cameras", []):
-            # Validate stream_url and preview_url
             stream_url = camera.get("stream_url")
             preview_url = camera.get("preview")
             if not stream_url or not isinstance(stream_url, str):
@@ -51,9 +51,25 @@ async def async_setup_entry(
                     stream_url,
                     preview_url,
                     entity_id,
-                    entity_id,  # Устанавливаем unique_id равным entity_id
+                    entity_id,
                 )
             )
+
+        # Add main pass QR camera
+        main_pass = account_data.get("main_pass", {})
+        if main_pass and main_pass.get("qr"):
+            qr_entity_id = f"camera.lsr_{account_id}_mainpass_qr".lower().replace("-", "_")
+            entities.append(
+                LSRMainPassQRCamera(
+                    coordinator,
+                    account_id,
+                    main_pass["qr"],
+                    main_pass.get("text", ""),
+                    qr_entity_id,
+                    qr_entity_id,
+                )
+            )
+
     async_add_entities(entities)
     _LOGGER.debug("Added %s camera entities", len(entities))
 
@@ -91,13 +107,13 @@ class LSRCamera(Camera):
         self._account_id = account_id
         self._camera_id = camera_id
         self._attr_unique_id = unique_id
-        self._attr_name = name  # Используем title из API
+        self._attr_name = name
         self._attr_has_entity_name = False
         self._stream_url = stream_url
         self._preview_url = preview_url
-        self._attr_preload_stream = True  # Enable stream preloading
+        self._attr_preload_stream = True
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self._account_id)},  # Общее устройство
+            identifiers={(DOMAIN, self._account_id)},
             name=f"Счет ID {self._account_id}",
             manufacturer="ЛСР",
             model="Communal Camera",
@@ -160,4 +176,88 @@ class LSRCamera(Camera):
             "stream_url": self._stream_url,
             "preview_url": self._preview_url,
             "preload_stream": self._attr_preload_stream,
+        }
+
+class LSRMainPassQRCamera(Camera):
+    """Representation of an LSR main pass QR code as a camera."""
+
+    def __init__(
+        self,
+        coordinator: LSRDataUpdateCoordinator,
+        account_id: str,
+        qr_url: str,
+        text: str,
+        entity_id: str,
+        unique_id: str,
+    ) -> None:
+        """Initialize the QR camera.
+
+        Args:
+            coordinator (LSRDataUpdateCoordinator): The data coordinator for the integration.
+            account_id (str): The account ID associated with the camera.
+            qr_url (str): The URL of the QR code image.
+            text (str): The text associated with the main pass.
+            entity_id (str): The entity ID for the camera.
+            unique_id (str): The unique ID for the camera.
+        """
+        super().__init__()
+        self._coordinator = coordinator
+        self._account_id = account_id
+        self._qr_url = qr_url
+        self._text = text
+        self._attr_unique_id = unique_id
+        self._attr_name = "Домофон QR-код"
+        self._attr_has_entity_name = False
+        self._attr_preload_stream = False  # No streaming, static image
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._account_id)},
+            name=f"Счет ID {self._account_id}",
+            manufacturer="ЛСР",
+            model="Main Pass QR",
+        )
+        self._attr_entity_registry_enabled_default = True
+        _LOGGER.debug(
+            "Initialized QR camera %s with unique_id %s, entity_id=%s (not set directly), qr_url: %s",
+            self._attr_name, self._attr_unique_id, entity_id, self._qr_url
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available.
+
+        Returns:
+            bool: True if the QR URL is available, false otherwise.
+        """
+        return bool(self._qr_url)
+
+    async def async_camera_image(self) -> bytes | None:
+        """Return bytes of QR code image.
+
+        Returns:
+            bytes | None: The image data if successful, none otherwise.
+        """
+        if not self._qr_url:
+            _LOGGER.debug("No QR URL for camera %s", self._attr_unique_id)
+            return None
+        try:
+            async with self._coordinator.session.get(self._qr_url, timeout=10) as resp:
+                if resp.status != 200:
+                    _LOGGER.error("Failed to fetch QR image for %s: HTTP %s", self._attr_unique_id, resp.status)
+                    return None
+                return await resp.read()
+        except Exception as err:
+            _LOGGER.error("Error fetching QR image for %s: %s", self._attr_unique_id, err)
+            return None
+
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes.
+
+        Returns:
+            dict: Additional attributes for the QR camera entity.
+        """
+        return {
+            "account_id": self._account_id,
+            "qr_url": self._qr_url,
+            "text": self._text,
         }
