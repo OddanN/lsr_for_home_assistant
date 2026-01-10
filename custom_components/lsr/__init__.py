@@ -9,8 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
-from .const import DOMAIN
-from .coordinator import LSRDataUpdateCoordinator
+from const import DOMAIN
+from coordinator import LSRDataUpdateCoordinator
 
 PLATFORMS = [Platform.SENSOR, Platform.CAMERA]
 

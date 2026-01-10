@@ -3,7 +3,6 @@
 
 import logging
 import re
-import json
 from datetime import datetime
 from typing import Union, Callable
 # noinspection PyProtectedMember
@@ -11,8 +10,8 @@ from homeassistant.components.sensor import SensorEntity, EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
-from .const import DOMAIN
-from .coordinator import LSRDataUpdateCoordinator
+from custom_components.lsr.const import DOMAIN
+from custom_components.lsr.coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 

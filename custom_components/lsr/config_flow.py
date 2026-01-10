@@ -11,7 +11,7 @@ import uuid
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .const import DOMAIN
-from .api_client import authenticate
+from custom_components.lsr.api_client import authenticate
 
 _LOGGER = logging.getLogger(__name__)
 

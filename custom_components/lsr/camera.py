@@ -7,8 +7,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 
-from .const import DOMAIN
-from .coordinator import LSRDataUpdateCoordinator
+from const import DOMAIN
+from coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 

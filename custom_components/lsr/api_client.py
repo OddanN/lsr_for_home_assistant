@@ -9,7 +9,7 @@ import asyncio
 import logging
 import hashlib
 from typing import Dict, List, Any
-from .const import API_URL, NAMESPACE
+from const import API_URL, NAMESPACE
 
 _LOGGER = logging.getLogger(__name__)
 

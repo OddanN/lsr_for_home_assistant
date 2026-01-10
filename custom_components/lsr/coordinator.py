@@ -14,7 +14,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .const import DOMAIN, NAMESPACE
-from .api_client import authenticate, get_accounts, get_account_data, get_cameras, get_communal_requests, get_meters, get_meter_history, get_camera_stream_url
+from custom_components.lsr.api_client import authenticate, get_accounts, get_account_data, get_cameras, get_communal_requests, get_meters, get_meter_history, get_camera_stream_url
 
 _LOGGER = logging.getLogger(__name__)
 
