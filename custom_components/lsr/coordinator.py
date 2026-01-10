@@ -1,4 +1,4 @@
-# Version: 1.1.0
+# Version: 1.1.2
 """Custom component for LSR integration, managing data updates and authentication."""
 
 from datetime import timedelta, datetime

@@ -1,4 +1,4 @@
-# Version: 1.1.0
+# Version: 1.1.2
 """API client for LSR integration.
 
 This module provides functions to handle API requests to https://mp.lsr.ru/api/rpc.

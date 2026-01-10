@@ -1,4 +1,4 @@
-# Version: 1.1.0
+# Version: 1.1.2
 """Initialization module for the LSR integration.
 
 This module sets up the LSR integration by handling config entries, coordinators,

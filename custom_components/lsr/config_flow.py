@@ -1,4 +1,4 @@
-# Version: 1.1.0
+# Version: 1.1.2
 """Config flow for LSR integration."""
 
 import logging
@@ -11,7 +11,7 @@ import uuid
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .const import DOMAIN
-from custom_components.lsr.api_client import authenticate
+from .api_client import authenticate
 
 _LOGGER = logging.getLogger(__name__)
 

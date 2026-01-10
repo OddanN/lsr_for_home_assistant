@@ -1,4 +1,4 @@
-# Version: 1.1.0
+# Version: 1.1.2
 """Constants and utility functions for the LSR integration.
 
 This module defines constants such as domain, API URL, namespace, and default scan interval,
