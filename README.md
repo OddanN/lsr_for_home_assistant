@@ -4,7 +4,7 @@
 ![GitHub Activity](https://img.shields.io/github/commit-activity/m/OddanN/lsr_for_home_assistant?style=flat-square)
 ![GitHub Downloads](https://img.shields.io/github/downloads/OddanN/lsr_for_home_assistant/total?style=flat-square)
 ![License](https://img.shields.io/github/license/OddanN/lsr_for_home_assistant?style=flat-square)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
 
 The LSR Integration allows you to connect your Home Assistant instance to the LSR (Leader-Smart Realty) system, providing access to communal account data, camera streams, and meter readings. This integration supports authentication via the LSR API and offers sensor entities for monitoring account status, notifications, and meter values.
 
@@ -17,7 +17,7 @@ follow the [instructions for adding a custom
 repository](https://hacs.xyz/docs/faq/custom_repositories) and then
 the integration will be available to install like any other.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=OddanN&repository=lsr_for_home_assistant&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg?style=flat-square)](https://my.home-assistant.io/redirect/hacs_repository/?owner=OddanN&repository=lsr_for_home_assistant&category=integration)
 
 ## Configuration
 
