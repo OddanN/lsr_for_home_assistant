@@ -1,45 +1,34 @@
 # LSR Integration for Home Assistant
 
+![GitHub Release](https://img.shields.io/github/v/release/OddanN/lsr_for_home_assistant?style=flat-square)
+![GitHub Activity](https://img.shields.io/github/commit-activity/m/OddanN/lsr_for_home_assistant?style=flat-square)
+![GitHub Downloads](https://img.shields.io/github/downloads/OddanN/lsr_for_home_assistant/total?style=flat-square)
+![License](https://img.shields.io/github/license/OddanN/lsr_for_home_assistant?style=flat-square)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
+
 The LSR Integration allows you to connect your Home Assistant instance to the LSR (Leader-Smart Realty) system, providing access to communal account data, camera streams, and meter readings. This integration supports authentication via the LSR API and offers sensor entities for monitoring account status, notifications, and meter values.
 
 ## Installation
 
-### Manual Installation
+Installation is easiest via the [Home Assistant Community Store
+(HACS)](https://hacs.xyz/), which is the best place to get third-party
+integrations for Home Assistant. Once you have HACS set up, simply click the button below (requires My Homeassistant configured) or
+follow the [instructions for adding a custom
+repository](https://hacs.xyz/docs/faq/custom_repositories) and then
+the integration will be available to install like any other.
 
-1. **Download the Integration**:
-   - Clone or download this repository to your Home Assistant `custom_components` directory:
-     ```
-     git clone https://github.com/yourusername/hass-lsr.git custom_components/lsr
-     ```
-   - Alternatively, download the ZIP file and extract it to `custom_components/lsr`.
-
-2. **Restart Home Assistant**:
-   - Restart your Home Assistant instance to load the new integration:
-     ```
-     ha core restart
-     ```
-
-3. **Configure the Integration**:
-   - Go to **Settings > Devices & Services > Add Integration** in the Home Assistant UI.
-   - Search for "LSR" and follow the setup wizard to enter your credentials.
-
-### HACS Installation (Optional)
-
-If you use [HACS](https://hacs.xyz/):
-1. Add this repository as a custom repository under HACS > Integrations.
-2. Install the "LSR" integration.
-3. Restart Home Assistant and configure via the UI as described above.
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=OddanN&repository=lsr_for_home_assistant&category=integration)
 
 ## Configuration
 
 The LSR Integration is configured through the Home Assistant UI. No manual YAML configuration is required.
 
 ### Setup Wizard
-- **Username**: Your LSR account username.
+- **Username**: Your LSR account username (usually the phone number is in the format 79991234567, without the +). 
 - **Password**: Your LSR account password.
 - **Scan Interval**: Optional field to set the update interval (default is 12 hours, minimum 1 hour).
 
-After successful authentication, the integration will automatically set up sensors and camera entities based on your account data.
+After successful authentication, the integration will automatically set up sensors.
 
 ## Usage
 
@@ -75,7 +64,6 @@ automation:
 
 ## Notes
 - This integration requires an active LSR account with API access.
-- Camera streams depend on the availability of `videoUrl` in the API response.
 - The integration uses a 12-hour default scan interval, adjustable via the configuration flow.
 - For support or to report issues, please open an issue on the [GitHub repository](https://github.com/yourusername/hass-lsr/issues).
 
