@@ -1,8 +1,9 @@
-# Version: 1.0.18
+# Version: 1.1.0
 """Custom component for LSR integration, providing sensor entities."""
 
 import logging
 import re
+import json
 from datetime import datetime
 from typing import Union, Callable
 # noinspection PyProtectedMember
@@ -31,20 +32,37 @@ async def async_setup_entry(
     entities = []
 
     sensor_types = {
-        "account-address": {"name": "account_address", "icon": "mdi:home"},
-        "payment-status": {"name": "payment_status", "icon": "mdi:cash"},
-        "notification-count": {"name": "notification_count", "icon": "mdi:bell"},
-        "camera-count": {"name": "camera_count", "icon": "mdi:camera"},
-        "meter-count": {"name": "meter_count", "icon": "mdi:counter"},
+        "address": {"name": "address", "friendly_name": "Адрес", "icon": "mdi:home", "state_class": None},
+        "personal-account": {"name": "personal_account", "friendly_name": "№ л\с", "icon": "mdi:card-account-details-outline", "state_class": None},
+        "payment-status": {"name": "payment_status", "icon": "mdi:cash", "state_class": None},
+        "notification-count": {"name": "notification_count", "friendly_name": "Уведомления","icon": "mdi:bell", "state_class": "measurement"},
+        "camera-count": {"name": "camera_count", "icon": "mdi:camera", "state_class": "measurement"}
     }
 
     for account_id, account_data in coordinator.data.items():
-        _LOGGER.debug("Creating sensors for account %s with data: %s", account_id, account_data)
+        _LOGGER.debug("=== Данные аккаунта %s ===", account_id)
+        _LOGGER.debug("Все доступные ключи: %s", sorted(account_data.keys()))
+        _LOGGER.debug("address          → %s", account_data.get("address"))
+        _LOGGER.debug("personal_account → %s", account_data.get("personal_account"))
+        _LOGGER.debug("payment_status   → %s", account_data.get("payment_status"))
+        _LOGGER.debug("notification_count → %s", account_data.get("notification_count"))
+        _LOGGER.debug("Полный account_data (первые 1000 символов): %s", str(account_data))
+
+        NUMERIC_DEFAULT = 999  # для всех счётчиков и числовых сенсоров — нормальный дефолт 0
+        STRING_DEFAULT = "STRING_DEFAULT"
 
         for sensor_type, config in sensor_types.items():
-            state = account_data.get(sensor_type.replace("-", "_"),
-                                     "Unknown" if sensor_type not in ["notification-count", "camera-count",
-                                                                      "meter-count"] else 0)
+            key = sensor_type.replace("-", "_")
+            if sensor_type == "meter-count":
+                # Специально считаем реальное количество из "meters"
+                meters = account_data.get("meters", {})
+                state = len(meters)
+                _LOGGER.debug("Реальное количество счётчиков для %s: %d (найдено %d ключей в meters)", 
+                            account_id, state, len(meters))
+            else:
+                # Для остальных — обычный get с правильным дефолтом
+                state = account_data.get(key, NUMERIC_DEFAULT if sensor_type in ["notification-count", "camera-count"] else STRING_DEFAULT)
+            
             entity_id = f"sensor.lsr_{account_id}_{config['name']}".lower().replace("-", "_")
             entities.append(
                 LSRSensor(
@@ -57,182 +75,245 @@ async def async_setup_entry(
                     config["icon"],
                     entity_id=entity_id,
                     unique_id=entity_id,
-                    state_class="measurement" if sensor_type.endswith("count") else None,
+                    state_class=config.get("state_class"),
+                    friendly_name=config.get("friendly_name", config["name"])
                 )
             )
 
+
         # Sensors for meters
-        for meter_id, meter_data in account_data.get("meters", {}).items():
-            meter_number_match = re.search(r'№(\d+)', meter_data["title"])
-            meter_number = meter_number_match.group(1).lower().replace("-", "_") if meter_number_match else meter_id[
-                -8:].lower().replace("-", "_")
-            sensor_entity_id = f"sensor.lsr_{account_id}_meter_{meter_number}_value".lower().replace("-", "_")
-            latest_value = meter_data["history"][-1][1] if meter_data["history"] else 0.0
+        meters = account_data.get("meters", {})
+        meter_count = len(meters)
+
+        # 1. Общий счётчик количества приборов
+        meters = account_data.get("meters", {})
+        meter_count = len(meters)
+
+        # Собираем список названий всех счётчиков для атрибута
+        all_meters_list = []
+        for meter_id, meter_data in meters.items():
+            title = meter_data.get("title", "Без названия")
+            meter_type_title = meter_data.get("type_title", "Неизвестно")
+            meter_str = f"{title} ({meter_type_title})"
+            all_meters_list.append(meter_str)
+        _LOGGER.debug("Собрано all_meters для %s: %s", account_id, all_meters_list)
+
+        # Создаём сенсор количества
+        meter_count_entity_id = f"sensor.lsr_{account_id}_meter_count".lower().replace("-", "_")
+        entities.append(
+            LSRSensor(
+                hass,
+                coordinator,
+                account_id,
+                "meter-count",
+                meter_count,
+                "meter_count",
+                "mdi:counter",
+                entity_id=meter_count_entity_id,
+                unique_id=meter_count_entity_id,
+                state_class="measurement",
+                friendly_name="Счётчиков всего",
+                extra_attributes={
+                    "all_meters": all_meters_list,
+                    "count": meter_count,
+                }
+            )
+        )
+
+        # 2. По одному сенсору на каждый счётчик
+        for meter_id, meter_data in meters.items():
+            title = meter_data.get("title", "Без названия")
+            
+            # Извлекаем чистый номер и тип для имени
+            meter_number_match = re.search(r"№(\d+)", title)
+            meter_number = meter_number_match.group(1) if meter_number_match else meter_id[-8:]
+            
+            # Обрезаем всё после номера → получаем "ХВС на ГВС", "ХВС", "Отопление"
+            prefix = re.sub(r"№\d+.*", "", title).strip()
+            if not prefix:
+                prefix = meter_data.get("type_title", "Счётчик").split()[-1]  # fallback
+            
+            # Имя: "Счётчик ХВС на ГВС №8358216"
+            friendly_name = f"Счётчик {prefix} №{meter_number}"
+            
+            # Чистое значение (float)
+            history = meter_data.get("history", [])
+            current_value = history[-1][1] if history else 0.0
+            
+            # Единицы измерения
+            unit = "м³" if meter_data.get("type_id") in ("HotWater", "ColdWater") else \
+                "Гкал" if meter_data.get("type_id") == "Heating" else ""
+            
+            # Тип счётчика для атрибутов
+            meter_type_title = meter_data.get("type_title", "Неизвестно")
+            
+            # Дата поверки
+            poverka_date = "Не указана"
+            rows = meter_data.get("dataTitleCustomFields", {}).get("rows", [])
+            for row in rows:
+                value = row.get("cells", [{}])[0].get("value", "")
+                if "поверки" in value.lower():
+                    poverka_text = re.sub(r"<[^>]+>", "", value)
+                    if ": " in poverka_text:
+                        poverka_date = poverka_text.split(": ", 1)[1].rstrip(".")
+                    break
+            
+            # Дата последнего показания
+            last_date = "Неизвестно"
+            if history:
+                last_date = history[-1][0]
+            
+            # Уникальное имя сущности
+            base_entity_id = f"lsr_{account_id}_meter_{meter_number}".lower().replace("-", "_")
+            
             entities.append(
                 LSRSensor(
                     hass,
                     coordinator,
                     account_id,
                     f"meter-{meter_id}-value",
-                    latest_value,
-                    f"meter_value",
+                    current_value,                       # ← только число!
+                    f"meter_{meter_number}_value",
                     "mdi:gauge",
-                    entity_id=sensor_entity_id,
-                    unique_id=sensor_entity_id,
+                    entity_id=f"sensor.{base_entity_id}_value",
+                    unique_id=f"{base_entity_id}_value",
                     state_class="measurement",
-                    entity_category=EntityCategory.DIAGNOSTIC,
-                    unit_of_measurement="m³" if meter_data["type_id"] in ["HotWater", "ColdWater"] else "Gcal" if
-                    meter_data["type_id"] == "Heating" else None
-                )
-            )
-            sensor_meter_title = f"sensor.lsr_{account_id}_meter_{meter_number}_title".lower().replace("-", "_")
-            entities.append(
-                LSRSensor(
-                    hass,
-                    coordinator,
-                    account_id,
-                    f"meter-{meter_id}-title",
-                    meter_data["title"],
-                    f"meter_title",
-                    "mdi:tag",
-                    entity_id=sensor_meter_title,
-                    unique_id=sensor_meter_title,
-                )
-            )
-            meter_poverka_raw = re.sub(r'<[^>]+>', '', next(
-                (row["cells"][0]["value"] for row in meter_data.get("dataTitleCustomFields", {}).get("rows", []) if
-                 row.get("title") == "Дата поверки"), "Не указана")).split(": ")[1].rstrip('.')
-            poverka_date = datetime.strptime(meter_poverka_raw,
-                                             "%d.%m.%Y").date() if meter_poverka_raw != "Не указана" else None
-            sensor_meter_poverka = f"sensor.lsr_{account_id}_meter_{meter_number}_poverka".lower().replace("-", "_")
-            entities.append(
-                LSRSensor(
-                    hass,
-                    coordinator,
-                    account_id,
-                    f"meter-{meter_id}-poverka",
-                    poverka_date,
-                    f"meter_poverka",
-                    "mdi:calendar-check",
-                    entity_id=sensor_meter_poverka,
-                    unique_id=sensor_meter_poverka,
+                    unit_of_measurement=unit,            # ← единицы здесь!
+                    friendly_name=friendly_name,         # ← "Счётчик ХВС на ГВС №8358216"
+                    extra_attributes={
+                        "poverka_date": poverka_date,
+                        "last_update": last_date,
+                        "meter_type": meter_type_title,
+                        "meter_id": meter_id,
+                        "title": title,
+                    }
                 )
             )
 
         # Sensors for communal requests
         communal_requests = account_data.get("communal_requests", [])
         total_requests = len(communal_requests)
-        done_requests = [req for req in communal_requests if req.get("status", {}).get("id") == "Done"]
-        atwork_requests = [req for req in communal_requests if req.get("status", {}).get("id") == "AtWork"]
-        onhold_requests = [req for req in communal_requests if req.get("status", {}).get("id") == "OnHold"]
-        waitingforregistration_requests = [req for req in communal_requests if
-                                           req.get("status", {}).get("id") == "WaitingForRegistration"]
 
-        # Sensor for total communal requests
-        sensor_total_requests = f"sensor.lsr_{account_id}_communalrequest_count_total".lower().replace("-", "_")
-        entities.append(
-            LSRSensor(
-                hass,
-                coordinator,
-                account_id,
-                "communalrequest-count-total",
-                total_requests,
-                "communalrequest_count_total",
-                "mdi:playlist-check",
-                entity_id=sensor_total_requests,
-                unique_id=sensor_total_requests,
-                state_class="measurement",
-            )
-        )
+        # Считаем по статусам
+        done_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "Done"])
+        atwork_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "AtWork"])
+        onhold_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "OnHold"])
+        waiting_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "WaitingForRegistration"])
 
-        # Sensor for done communal requests
-        sensor_done_requests = f"sensor.lsr_{account_id}_communalrequest_count_done".lower().replace("-", "_")
-        entities.append(
-            LSRSensor(
-                hass,
-                coordinator,
-                account_id,
-                "communalrequest-count-done",
-                len(done_requests),
-                "communalrequest_count_done",
-                "mdi:check-circle",
-                entity_id=sensor_done_requests,
-                unique_id=sensor_done_requests,
-                state_class="measurement",
-                extra_attributes={"titles": [req["objectId"]["title"] for req in done_requests]},
-            )
-        )
+        # Словарь с локализованными названиями и иконками
+        request_sensors = [
+            {
+                "type": "communalrequest-count-total",
+                "name": "communalrequest_count_total",
+                "friendly_name": "Заявки всего",
+                "icon": "mdi:playlist-check",
+                "count": total_requests,
+                "extra_attributes": {
+                    "done": done_count,
+                    "atwork": atwork_count,
+                    "onhold": onhold_count,
+                    "waiting": waiting_count,
+                }
+            },
+            {
+                "type": "communalrequest-count-done",
+                "name": "communalrequest_count_done",
+                "friendly_name": "Выполненные заявки",
+                "icon": "mdi:check-circle",
+                "count": done_count,
+                "extra_attributes": None,
+            },
+            {
+                "type": "communalrequest-count-atwork",
+                "name": "communalrequest_count_atwork",
+                "friendly_name": "Заявки в работе",
+                "icon": "mdi:progress-clock",
+                "count": atwork_count,
+                "extra_attributes": None,
+            },
+            {
+                "type": "communalrequest-count-onhold",
+                "name": "communalrequest_count_onhold",
+                "friendly_name": "Заявки на паузе",
+                "icon": "mdi:pause-circle",
+                "count": onhold_count,
+                "extra_attributes": None,
+            },
+            {
+                "type": "communalrequest-count-waitingforregistration",
+                "name": "communalrequest_count_waitingforregistration",
+                "friendly_name": "Заявки ожидают регистрации",
+                "icon": "mdi:clock-outline",
+                "count": waiting_count,
+                "extra_attributes": None,
+            }
+        ]
 
-        # Sensor for atwork communal requests
-        sensor_atwork_requests = f"sensor.lsr_{account_id}_communalrequest_count_atwork".lower().replace("-", "_")
-        entities.append(
-            LSRSensor(
-                hass,
-                coordinator,
-                account_id,
-                "communalrequest-count-atwork",
-                len(atwork_requests),
-                "communalrequest_count_atwork",
-                "mdi:progress-clock",
-                entity_id=sensor_atwork_requests,
-                unique_id=sensor_atwork_requests,
-                state_class="measurement",
-                extra_attributes={"titles": [req["objectId"]["title"] for req in atwork_requests]},
+        for req_sensor in request_sensors:
+            entity_id = f"sensor.lsr_{account_id}_{req_sensor['name']}".lower().replace("-", "_")
+            entities.append(
+                LSRSensor(
+                    hass,
+                    coordinator,
+                    account_id,
+                    req_sensor["type"],
+                    req_sensor["count"],
+                    req_sensor["name"],
+                    req_sensor["icon"],
+                    entity_id=entity_id,
+                    unique_id=entity_id,
+                    state_class="measurement",
+                    friendly_name=req_sensor["friendly_name"],
+                    extra_attributes=req_sensor.get("extra_attributes")
+                )
             )
-        )
-
-        # Sensor for onhold communal requests
-        sensor_onhold_requests = f"sensor.lsr_{account_id}_communalrequest_count_onhold".lower().replace("-", "_")
-        entities.append(
-            LSRSensor(
-                hass,
-                coordinator,
-                account_id,
-                "communalrequest-count-onhold",
-                len(onhold_requests),
-                "communalrequest_count_onhold",
-                "mdi:pause-circle",
-                entity_id=sensor_onhold_requests,
-                unique_id=sensor_onhold_requests,
-                state_class="measurement",
-                extra_attributes={"titles": [req["objectId"]["title"] for req in onhold_requests]},
-            )
-        )
-
-        # Sensor for waitingforregistration communal requests
-        sensor_waitingforregistration_requests = f"sensor.lsr_{account_id}_communalrequest_count_waitingforregistration".lower().replace(
-            "-", "_")
-        entities.append(
-            LSRSensor(
-                hass,
-                coordinator,
-                account_id,
-                "communalrequest-count-waitingforregistration",
-                len(waitingforregistration_requests),
-                "communalrequest_count_waitingforregistration",
-                "mdi:clock-outline",
-                entity_id=sensor_waitingforregistration_requests,
-                unique_id=sensor_waitingforregistration_requests,
-                state_class="measurement",
-                extra_attributes={"titles": [req["objectId"]["title"] for req in waitingforregistration_requests]},
-            )
-        )
 
         # New sensor for payment due
         accruals = account_data.get("accruals", [])
         if accruals:
+            _LOGGER.debug("accruals: %s", accruals)
+
+            # Берём только валидные начисления (где есть title)
             latest_accrual = accruals[0]
-            amount_str = re.search(r"Начислено (\d+\.?\d{0,2}₽)",
-                                   latest_accrual["listFields"]["rows"][0]["cells"][1]["value"]).group(1)
-            amount = float(amount_str.replace("₽", "").replace(",", "."))
+
+            # ---------- Сумма начисления ----------
+            amount = 0.0
+            amount_cell = latest_accrual.get("listFields", {}) \
+                .get("rows", [{}])[0] \
+                .get("cells", [{}, {}])[1] \
+                .get("value", "")
+
+            amount_text = re.sub(r"<[^>]+>", "", amount_cell)
+
+            amount_match = re.search(r"Начислено\s*([\d.,]+)", amount_text)
+            if amount_match:
+                amount = float(amount_match.group(1).replace(",", "."))
+
+            # ---------- Атрибуты ----------
+            extra_attributes = {}
+
+            for accrual in accruals:
+                _LOGGER.debug("accrual: %s", accrual)
+                accrual_id = accrual["objectId"]["id"]
+
+                # Дата
+                date_cell = accrual["listFields"]["rows"][0]["cells"][0]["value"]
+
+                date_text = re.sub(r"<[^>]+>", "", date_cell)
+
+                # Сумма
+                value_cell = accrual["listFields"]["rows"][0]["cells"][1]["value"]
+
+                value_text = re.sub(r"<[^>]+>", "", value_cell)
+                value_match = re.search(r"Начислено\s*([\d.,]+)", value_text)
+
+                extra_attributes[accrual_id] = {
+                    "date": date_text.strip(),
+                    "amount": value_match.group(1) if value_match else None
+                }
+
             sensor_payment_due = f"sensor.lsr_{account_id}_payment_due".lower().replace("-", "_")
-            extra_attributes = {
-                accrual["objectId"]["id"]: {
-                    "date": re.search(r">(.+)<", accrual["listFields"]["rows"][0]["cells"][0]["value"]).group(1),
-                    "amount": re.search(r"Начислено (\d+\.?\d{0,2}₽)",
-                                        accrual["listFields"]["rows"][0]["cells"][1]["value"]).group(1)
-                } for accrual in accruals
-            }
+
             entities.append(
                 LSRSensor(
                     hass,
@@ -249,48 +330,47 @@ async def async_setup_entry(
                 )
             )
 
-        # New sensor for main pass PIN
+        # Новый объединённый сенсор СКУД (основан на QR-коде)
         main_pass = account_data.get("main_pass", {})
-        if main_pass:
-            sensor_mainpass_pin = f"sensor.lsr_{account_id}_mainpass_pin".lower().replace("-", "_")
-            entities.append(
-                LSRSensor(
-                    hass,
-                    coordinator,
-                    account_id,
-                    "mainpass-pin",
-                    main_pass.get("pin", ""),
-                    "mainpass_pin",
-                    "mdi:lock",
-                    entity_id=sensor_mainpass_pin,
-                    unique_id=sensor_mainpass_pin,
-                    extra_attributes={
-                        "text": main_pass.get("text", ""),
-                        "qr": main_pass.get("qr", "")
-                    }
-                )
-            )
+        guest_passes_data = account_data.get("guest_passes", {})
 
-        # New sensor for guest passes
-        if account_data.get("guest_passes", {}):
-            sensor_guestpass = f"sensor.lsr_{account_id}_guestpass".lower().replace("-", "_")
+        if main_pass or guest_passes_data:
+            # Состояние = ПИН-код (или "Нет пина", если отсутствует)
+            pin_code = main_pass.get("pin", "Нет пина")
+
+            # Формируем красивый список гостевых пропусков для атрибутов
+            guest_list = []
+            guest_count = guest_passes_data.get("count", 0)
+            for pass_data in guest_passes_data.get("items", []):
+                from_date = datetime.fromtimestamp(pass_data['dateFrom']).strftime('%d.%m.%Y')
+                to_date = datetime.fromtimestamp(pass_data['dateTo']).strftime('%d.%m.%Y')
+                pass_str = (
+                    f"{pass_data['strategy']['title']} | "
+                    f"{from_date}–{to_date} | "
+                    f"Пин: {pass_data.get('pin', '—')} | "
+                    f"QR: {pass_data.get('qr', '—')}"
+                )
+                guest_list.append(pass_str)
+
+            # Создаём сенсор
+            skud_qr_entity_id = f"sensor.lsr_{account_id}_skud_qr_code".lower().replace("-", "_")
             entities.append(
                 LSRSensor(
                     hass,
                     coordinator,
                     account_id,
-                    "guestpass",
-                    account_data.get("guest_passes", {}).get("count", 0),
-                    "guestpass",
-                    "mdi:ticket",
-                    entity_id=sensor_guestpass,
-                    unique_id=sensor_guestpass,
-                    state_class="measurement",
+                    "skud-qr-code",
+                    pin_code,  # ← состояние = ПИН-код
+                    "skud_qr_code",
+                    "mdi:qrcode",
+                    entity_id=skud_qr_entity_id,
+                    unique_id=skud_qr_entity_id,
+                    friendly_name="СКУД QR-код",
                     extra_attributes={
-                        "passes": [
-                            f"Тип: {pass_data['strategy']['title']}. С {datetime.fromtimestamp(pass_data['dateFrom']).strftime('%d.%m.%Y')} по {datetime.fromtimestamp(pass_data['dateTo']).strftime('%d.%m.%Y')}. Пин-код: {pass_data['pin']}. QR-код: {pass_data['qr']}"
-                            for pass_data in account_data.get("guest_passes", {}).get("items", [])
-                        ]
+                        "guest_passes_count": guest_count,
+                        "guest_passes": guest_list,
+                        "main_pass_text": main_pass.get("text", ""),
+                        "main_pass_qr": main_pass.get("qr", ""),
                     }
                 )
             )
@@ -319,6 +399,7 @@ class LSRSensor(SensorEntity):
             entity_category: EntityCategory = None,
             unit_of_measurement: str = None,
             extra_attributes: dict = None,
+            friendly_name: str = None
     ) -> None:
         """Initialize the sensor.
 
@@ -343,14 +424,14 @@ class LSRSensor(SensorEntity):
         self._account_id = account_id
         self._sensor_type = sensor_type
         self._attr_unique_id = unique_id
-        self._attr_name = entity_name
+        self._attr_name = friendly_name if friendly_name else entity_name
         self._attr_icon = icon
         self._attr_has_entity_name = True
         self._state = state if state is not None else (
             0 if sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
-                                 "communalrequest-count-done", "communalrequest-count-atwork",
-                                 "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
-                                 "guestpass"] else "Unknown")
+            "communalrequest-count-done", "communalrequest-count-atwork",
+            "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
+            "guestpass"] else "Unknown")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._account_id)},
             name=f"Счет ID {self._account_id}",
@@ -358,18 +439,34 @@ class LSRSensor(SensorEntity):
             model="Communal Account",
         )
         self._attr_entity_registry_enabled_default = True
-        self._attr_state_class = state_class
-        self._attr_entity_category = entity_category
-        self._attr_unit_of_measurement = unit_of_measurement
-        self._attr_extra_state_attributes = extra_attributes or {}
-        _LOGGER.debug(
-            "Initialized sensor %s with unique_id %s, entity_id=%s (not set directly), enabled_default: %s, state: %s",
-            self._attr_name,
-            self._attr_unique_id,
-            entity_id,
-            self._attr_entity_registry_enabled_default,
-            self._state,
-        )
+
+        # Автоматическое распределение по категориям Home Assistant
+        if self._sensor_type in ["mainpass-pin", "guestpass"]:
+            self._attr_entity_category = None  # СКУД → основной список (visible)
+
+        elif self._sensor_type == "payment-status":
+            self._attr_entity_category = None  # Статус оплаты → основной список
+
+        elif self._sensor_type == "communalrequest-count-total":
+            self._attr_entity_category = None  # Заявки всего → основной список
+
+        elif self._sensor_type == "meter-count":
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Счётчиков всего → Диагностика (скрыто)
+
+        elif self._sensor_type.startswith("communalrequest-count-") and self._sensor_type != "communalrequest-count-total":
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Остальные заявки → Диагностика
+
+        elif self._sensor_type in ["address", "personal-account"]:
+            self._attr_entity_category = None  # Адрес и № л/с → Настройки
+
+        elif self._sensor_type in ["payment-due"]:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Сумма к оплате → Диагностика
+
+        elif self._sensor_type.startswith("meter-") and "-value" in self._sensor_type:
+            self._attr_entity_category = None  # Показания отдельных счётчиков → основной список
+
+        else:
+            self._attr_entity_category = None  # Всё остальное — основной список
 
     @property
     def available(self) -> bool:
@@ -388,11 +485,13 @@ class LSRSensor(SensorEntity):
         Returns:
             str: The translated name of the sensor.
         """
-        if self._sensor_type == "mainpass_pin":
-            return "Домофон Пин-код"
-        elif self._sensor_type == "guestpass":
-            return "Гостевые пропуска"
-        return self.hass.config.localized_string(self._attr_name) or self._attr_name
+        if self._sensor_type == "guestpass":
+            return "СКУД Гостевые пропуска"
+        if self._sensor_type == "camera-count":
+            return "Количество камер"
+        if self._sensor_type == "notification-count":
+            return "Количество уведомлений"
+        return self._attr_name
 
     @property
     def native_value(self):
@@ -403,10 +502,10 @@ class LSRSensor(SensorEntity):
         """
         state = self._coordinator.data.get(self._account_id, {}).get(self._sensor_type, self._state)
         if self._sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
-                                 "communalrequest-count-done", "communalrequest-count-atwork",
-                                 "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
-                                 "guestpass"]:
-            state = int(state) if state is not None else 0
+        "communalrequest-count-done", "communalrequest-count-atwork",
+        "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
+        "guestpass"]:
+            state = int(state) if state is not None else 998
         elif self._sensor_type.endswith("-value") or self._sensor_type == "payment-due":
             state = round(float(state) if state is not None else 0.0, 4)
         elif self._sensor_type.startswith("meter-") and "-poverka" not in self._sensor_type:

@@ -1,4 +1,4 @@
-# Version: 1.0.5
+# Version: 1.1.0
 """Config flow for LSR integration."""
 
 import logging

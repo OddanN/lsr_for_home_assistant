@@ -1,4 +1,4 @@
-# Version: 1.0.0
+# Version: 1.1.0
 """Custom component for LSR integration, providing button entities."""
 
 import logging

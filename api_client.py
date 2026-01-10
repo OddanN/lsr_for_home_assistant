@@ -1,4 +1,4 @@
-# Version: 1.0.6
+# Version: 1.1.0
 """API client for LSR integration.
 
 This module provides functions to handle API requests to https://mp.lsr.ru/api/rpc.
@@ -169,10 +169,21 @@ async def get_account_data(session: aiohttp.ClientSession, access_token: str, ac
     }
     try:
         async with session.post(API_URL, json=payload, headers=headers, timeout=30) as resp:
+            # response_text = await resp.text()  # обязательно await
+            # _LOGGER.debug("LSR raw API response: %s", response_text)
+
+            # # Вывод cURL команды
+            # import json
+            # curl_command = f"curl -X POST '{API_URL}'"
+            # for header, value in headers.items():
+            #     curl_command += f" -H \"{header}: {value}\""
+            # curl_command += f" -d '{json.dumps(payload)}'"
+            # _LOGGER.debug("cURL command: %s", curl_command)
             if resp.status != 200:
                 _LOGGER.error("Failed to get account data for %s: HTTP %s", account_id, resp.status)
                 raise aiohttp.ClientError(f"Failed to get account data: HTTP {resp.status}")
             data = await resp.json()
+            _LOGGER.debug("get_account_data: %s", data)
             if data.get("statusCode") != 200:
                 _LOGGER.error("Failed to get account data for %s: Status code %s, message: %s", account_id, data.get("statusCode"), data.get("message", "Unknown error"))
                 raise aiohttp.ClientError(f"Failed to get account data: Status code {data.get('statusCode')}")
@@ -309,6 +320,16 @@ async def get_meters(session: aiohttp.ClientSession, access_token: str, account_
     }
     try:
         async with session.post(API_URL, json=payload, headers=headers, timeout=30) as resp:
+            # response_text = await resp.text()  # обязательно await
+            # _LOGGER.debug("LSR raw API response: %s", response_text)
+
+            # # Вывод cURL команды
+            # import json
+            # curl_command = f"curl -X POST '{API_URL}'"
+            # for header, value in headers.items():
+            #     curl_command += f" -H \"{header}: {value}\""
+            # curl_command += f" -d '{json.dumps(payload)}'"
+            # _LOGGER.debug("cURL command: %s", curl_command)
             if resp.status != 200:
                 _LOGGER.error("Failed to get meters for %s: HTTP %s", account_id, resp.status)
                 raise aiohttp.ClientError(f"Failed to get meters: HTTP {resp.status}")

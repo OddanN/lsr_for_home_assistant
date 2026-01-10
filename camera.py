@@ -1,4 +1,4 @@
-# Version: 1.0.3
+# Version: 1.1.0
 """Custom component for LSR integration, providing camera entities."""
 
 import logging
@@ -207,7 +207,7 @@ class LSRMainPassQRCamera(Camera):
         self._qr_url = qr_url
         self._text = text
         self._attr_unique_id = unique_id
-        self._attr_name = "Домофон QR-код"
+        self._attr_name = "СКУД QR-код"
         self._attr_has_entity_name = False
         self._attr_preload_stream = False  # No streaming, static image
         self._attr_device_info = DeviceInfo(
