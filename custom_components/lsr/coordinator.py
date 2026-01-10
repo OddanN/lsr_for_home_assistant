@@ -1,4 +1,4 @@
-# Version: 1.1.2
+# Version: 1.1.3
 """Custom component for LSR integration, managing data updates and authentication."""
 
 from datetime import timedelta, datetime
@@ -7,14 +7,25 @@ import uuid
 import re
 import asyncio
 from typing import Dict
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+
 from .const import DOMAIN, NAMESPACE
-from custom_components.lsr.api_client import authenticate, get_accounts, get_account_data, get_cameras, get_communal_requests, get_meters, get_meter_history, get_camera_stream_url
+from .api_client import (
+    authenticate,
+    get_accounts,
+    get_account_data,
+    get_cameras,
+    get_communal_requests,
+    get_meters,
+    get_meter_history,
+    get_camera_stream_url,
+)
 
 _LOGGER = logging.getLogger(__name__)
 

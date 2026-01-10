@@ -1,4 +1,4 @@
-# Version: 1.1.2
+# Version: 1.1.3
 """API client for LSR integration.
 
 This module provides functions to handle API requests to https://mp.lsr.ru/api/rpc.
@@ -9,7 +9,8 @@ import asyncio
 import logging
 import hashlib
 from typing import Dict, List, Any
-from const import API_URL, NAMESPACE
+
+from .const import API_URL, NAMESPACE
 
 _LOGGER = logging.getLogger(__name__)
 

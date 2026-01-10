@@ -1,4 +1,4 @@
-# Version: 1.1.2
+# Version: 1.1.3
 """Custom component for LSR integration, providing sensor entities."""
 
 import logging
@@ -10,8 +10,9 @@ from homeassistant.components.sensor import SensorEntity, EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
-from custom_components.lsr.const import DOMAIN
-from custom_components.lsr.coordinator import LSRDataUpdateCoordinator
+
+from .const import DOMAIN
+from .coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 

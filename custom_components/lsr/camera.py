@@ -1,4 +1,4 @@
-# Version: 1.1.2
+# Version: 1.1.3
 """Custom component for LSR integration, providing camera entities."""
 
 import logging
@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
-from coordinator import LSRDataUpdateCoordinator
+from .coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 

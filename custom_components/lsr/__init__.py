@@ -1,4 +1,4 @@
-# Version: 1.1.2
+# Version: 1.1.3
 """Initialization module for the LSR integration.
 
 This module sets up the LSR integration by handling config entries, coordinators,
@@ -8,8 +8,9 @@ and platform setups for sensors and cameras.
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
+
 from .const import DOMAIN
-from coordinator import LSRDataUpdateCoordinator
+from .coordinator import LSRDataUpdateCoordinator
 
 PLATFORMS = [Platform.SENSOR, Platform.CAMERA]
 
