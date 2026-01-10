@@ -427,6 +427,7 @@ class LSRSensor(SensorEntity):
         self._attr_name = friendly_name if friendly_name else entity_name
         self._attr_icon = icon
         self._attr_has_entity_name = True
+        self._attr_extra_state_attributes = extra_attributes or {}
         self._state = state if state is not None else (
             0 if sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
             "communalrequest-count-done", "communalrequest-count-atwork",
