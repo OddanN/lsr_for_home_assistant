@@ -28,6 +28,9 @@ async def async_setup_entry(
     entities = []
 
     for account_id, account_data in coordinator.data.items():
+        personal_account_number = account_data.get("personal_account_number", "unknown")
+        entity_suffix = personal_account_number if personal_account_number != "unknown" else account_id[-8:]
+
         # Add existing cameras
         for camera in account_data.get("cameras", []):
             stream_url = camera.get("stream_url")
@@ -38,7 +41,7 @@ async def async_setup_entry(
             if not preview_url or not isinstance(preview_url, str):
                 _LOGGER.warning("Invalid or missing preview_url for camera %s (account %s)", camera.get("id"), account_id)
                 preview_url = None
-            entity_id = f"camera.lsr_{account_id}_camera_{camera['id']}".lower().replace("-", "_")
+            entity_id = f"camera.lsr_{entity_suffix}_camera_{camera['id']}".lower().replace("-", "_")
             entities.append(
                 LSRCamera(
                     coordinator,
@@ -55,7 +58,7 @@ async def async_setup_entry(
         # Add main pass QR camera
         main_pass = account_data.get("main_pass", {})
         if main_pass and main_pass.get("qr"):
-            qr_entity_id = f"camera.lsr_{account_id}_mainpass_qr".lower().replace("-", "_")
+            qr_entity_id = f"camera.lsr_{entity_suffix}_mainpass_qr".lower().replace("-", "_")
             entities.append(
                 LSRMainPassQRCamera(
                     coordinator,
