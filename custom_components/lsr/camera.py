@@ -1,15 +1,16 @@
-# Version: 1.1.3
-"""Custom component for LSR integration, providing camera entities."""
+# Version: 1.2.0
+"""Camera platform for LSR integration."""
 
 import logging
-from homeassistant.components.camera import CameraEntity
+from datetime import datetime
+from homeassistant.components.camera import Camera  # ← правильный импорт
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-class LSRMainPassQRCamera(CameraEntity):
+class LSRMainPassQRCamera(Camera):
     """Representation of LSR main pass QR camera."""
 
     def __init__(self, coordinator, account_id, camera_data):
@@ -17,7 +18,7 @@ class LSRMainPassQRCamera(CameraEntity):
         self._account_id = account_id
         self._camera_data = camera_data
 
-        # Получаем номер л/с из координатора
+        # Номер л/с из координатора (если добавлен)
         personal_account_number = coordinator.data.get(account_id, {}).get("personal_account_number", account_id[-8:])
         entity_suffix = personal_account_number
 
@@ -31,28 +32,20 @@ class LSRMainPassQRCamera(CameraEntity):
             model="Communal Account",
         )
 
-        self._attr_has_entity_name = False  # ← отключаем префикс
-
-        # Опционально: если есть stream URL
-        self._stream_source = camera_data.get("stream_url")  # ← добавь в camera_data
+        self._attr_has_entity_name = False  # отключаем префикс
 
     @property
     def is_streaming(self) -> bool:
         """Return true if the camera is streaming."""
-        return bool(self._stream_source)
+        return True  # если стрим всегда доступен
 
     async def async_camera_image(self):
         """Return bytes of camera image."""
         # Реализуй получение скриншота, если API позволяет
-        # return await self._coordinator.get_camera_snapshot(self._camera_data['id'])
         return None  # пока заглушка
 
     @property
     def stream_source(self):
         """Return the source of the stream."""
-        return self._stream_source
-
-    @property
-    def frontend_url(self):
-        """Return URL to the camera's frontend."""
-        return self._stream_source  # если стрим доступен через URL
+        # Здесь должен быть реальный URL стрима из camera_data
+        return self._camera_data.get("stream_url")  # добавь в camera_data при загрузке

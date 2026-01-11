@@ -1,7 +1,7 @@
 {
   "domain": "lsr",
   "name": "LSR Integration for HA",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "config_flow": true,
   "documentation": "https://github.com/OddanN/lsr_for_home_assistant?tab=readme-ov-file#lsr-integration-for-home-assistant",
   "issue_tracker": "https://github.com/OddanN/lsr_for_home_assistant/issues",

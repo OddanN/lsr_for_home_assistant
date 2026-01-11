@@ -1,4 +1,4 @@
-# Version: 1.1.3
+# Version: 1.2.0
 """Custom component for LSR integration, managing data updates and authentication."""
 
 from datetime import timedelta, datetime
@@ -345,21 +345,6 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 "No valid accrual items with communalAccount.title for account %s",
                 account_id,
             )
-
-        # # -------- АДРЕС --------
-        # _LOGGER.debug("account_data: %s", account_data)
-        # address_raw = (
-        #     account_data
-        #     .get("optionalObject", {})
-        #     .get("rows", [{}])[0]
-        #     .get("cells", [{}])[0]
-        #     .get("value")
-        # )
-
-        # _LOGGER.debug("address_raw: %s", address_raw)
-        # match = re.search(r"Л/с №(\d+)", address_raw or "")
-        # address = match.group(1) if match else "Unknown"
-        # _LOGGER.debug("address: %s", address)
 
         # -------- КАМЕРЫ --------
         cameras = []
