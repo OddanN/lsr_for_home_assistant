@@ -75,6 +75,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     
                     parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
                     parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
+                    account_title = account["objectId"]["title"]
                     
                     _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
                 
@@ -90,6 +91,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
 
                 # Добавляем спарсенные значения в результат
                 account_data["address"] = parsed_address
+                account_data["account_title"] = account_title
                 account_data["personal_account"] = parsed_personal_account
                 
                 detailed_data[account_id] = account_data

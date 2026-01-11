@@ -10,6 +10,7 @@ from homeassistant.components.sensor import SensorEntity, EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.components.sensor import SensorStateClass, SensorDeviceClass
 
 from .const import DOMAIN
 from .coordinator import LSRDataUpdateCoordinator
@@ -62,8 +63,12 @@ async def async_setup_entry(
             else:
                 # Для остальных — обычный get с правильным дефолтом
                 state = account_data.get(key, NUMERIC_DEFAULT if sensor_type in ["notification-count", "camera-count"] else STRING_DEFAULT)
-            
-            entity_id = f"sensor.lsr_{account_id}_{config['name']}".lower().replace("-", "_")
+
+            personal_account = account_data.get("personal_account", "unknown")
+            entity_suffix = personal_account.replace(" ", "_").lower() if personal_account != "Л/с не найден" else account_id[-8:]
+
+            entity_id = f"sensor.lsr_{entity_suffix}_{config['name']}".lower().replace("-", "_")
+            unique_id = f"lsr_{entity_suffix}_{sensor_type}"
             entities.append(
                 LSRSensor(
                     hass,
@@ -74,7 +79,7 @@ async def async_setup_entry(
                     config["name"],
                     config["icon"],
                     entity_id=entity_id,
-                    unique_id=entity_id,
+                    unique_id=unique_id,
                     state_class=config.get("state_class"),
                     friendly_name=config.get("friendly_name", config["name"])
                 )
@@ -99,7 +104,7 @@ async def async_setup_entry(
         _LOGGER.debug("Собрано all_meters для %s: %s", account_id, all_meters_list)
 
         # Создаём сенсор количества
-        meter_count_entity_id = f"sensor.lsr_{account_id}_meter_count".lower().replace("-", "_")
+        meter_count_entity_id = f"sensor.lsr_{entity_suffix}_meter_count".lower().replace("-", "_")
         entities.append(
             LSRSensor(
                 hass,
@@ -164,7 +169,7 @@ async def async_setup_entry(
                 last_date = history[-1][0]
             
             # Уникальное имя сущности
-            base_entity_id = f"lsr_{account_id}_meter_{meter_number}".lower().replace("-", "_")
+            base_entity_id = f"lsr_{entity_suffix}_meter_{meter_number}".lower().replace("-", "_")
             
             entities.append(
                 LSRSensor(
@@ -426,6 +431,11 @@ class LSRSensor(SensorEntity):
         self._attr_unique_id = unique_id
         self._attr_name = friendly_name if friendly_name else entity_name
         self._attr_icon = icon
+        if state_class:
+            try:
+                self._attr_state_class = SensorStateClass(state_class)
+            except ValueError:
+                _LOGGER.warning("Invalid state_class %s for %s", state_class, unique_id)
         self._attr_has_entity_name = True
         self._attr_extra_state_attributes = extra_attributes or {}
         self._state = state if state is not None else (
@@ -435,7 +445,9 @@ class LSRSensor(SensorEntity):
             "guestpass"] else "Unknown")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._account_id)},
-            name=f"Счет ID {self._account_id}",
+            # name=f"Счет ID {self._account_id}",
+            name=coordinator.data.get(self._account_id, {}).get("account_title",
+                                                                f"ЛСР Аккаунт {self._account_id[-8:]}"),
             manufacturer="ЛСР",
             model="Communal Account",
         )

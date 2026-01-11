@@ -21,7 +21,10 @@ the integration will be available to install like any other.
 
 ## Configuration
 
-The LSR Integration is configured through the Home Assistant UI. No manual YAML configuration is required.
+After installing, you can easily configure your devices using the Integrations configuration UI (No manual YAML configuration is required).  Go to Settings / Devices & Services and press the Add Integration button, or click the shortcut button below (requires My Homeassistant configured).
+
+[![Add Integration to your Home Assistant
+instance.](https://my.home-assistant.io/badges/config_flow_start.svg?style=flat-square)](https://my.home-assistant.io/redirect/config_flow_start/?domain=lsr)
 
 ### Setup Wizard
 - **Username**: Your LSR account username (usually the phone number is in the format 79991234567, without the +). 
