@@ -67,7 +67,7 @@ async def async_setup_entry(
             personal_account = account_data.get("personal_account", "unknown")
             entity_suffix = personal_account.replace(" ", "_").lower() if personal_account != "Л/с не найден" else account_id[-8:]
 
-            entity_id = f"sensor.lsr_{entity_suffix}_{config['name']}".lower().replace("-", "_")
+            entity_id = f"sensor.lsr_{entity_suffix}_{sensor_type}".lower().replace("-", "_")
             unique_id = f"lsr_{entity_suffix}_{sensor_type}"
             entities.append(
                 LSRSensor(
@@ -436,7 +436,7 @@ class LSRSensor(SensorEntity):
                 self._attr_state_class = SensorStateClass(state_class)
             except ValueError:
                 _LOGGER.warning("Invalid state_class %s for %s", state_class, unique_id)
-        self._attr_has_entity_name = True
+        self._attr_has_entity_name = False
         self._attr_extra_state_attributes = extra_attributes or {}
         self._state = state if state is not None else (
             0 if sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
