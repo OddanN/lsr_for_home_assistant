@@ -64,11 +64,11 @@ async def async_setup_entry(
                 # Для остальных — обычный get с правильным дефолтом
                 state = account_data.get(key, NUMERIC_DEFAULT if sensor_type in ["notification-count", "camera-count"] else STRING_DEFAULT)
 
-            personal_account = account_data.get("personal_account", "unknown")
-            entity_suffix = personal_account.replace(" ", "_").lower() if personal_account != "Л/с не найден" else account_id[-8:]
+            personal_account_number = account_data.get("personal_account_number", "unknown")
+            entity_suffix = personal_account_number if personal_account_number != "unknown" else account_id[-8:]
 
             entity_id = f"sensor.lsr_{entity_suffix}_{sensor_type}".lower().replace("-", "_")
-            unique_id = f"lsr_{entity_suffix}_{sensor_type}"
+            unique_id = entity_id
             entities.append(
                 LSRSensor(
                     hass,
@@ -255,7 +255,7 @@ async def async_setup_entry(
         ]
 
         for req_sensor in request_sensors:
-            entity_id = f"sensor.lsr_{account_id}_{req_sensor['name']}".lower().replace("-", "_")
+            entity_id = f"sensor.lsr_{entity_suffix}_{req_sensor['name']}".lower().replace("-", "_")
             entities.append(
                 LSRSensor(
                     hass,
@@ -317,7 +317,7 @@ async def async_setup_entry(
                     "amount": value_match.group(1) if value_match else None
                 }
 
-            sensor_payment_due = f"sensor.lsr_{account_id}_payment_due".lower().replace("-", "_")
+            sensor_payment_due = f"sensor.lsr_{entity_suffix}_payment_due".lower().replace("-", "_")
 
             entities.append(
                 LSRSensor(
@@ -358,7 +358,7 @@ async def async_setup_entry(
                 guest_list.append(pass_str)
 
             # Создаём сенсор
-            skud_qr_entity_id = f"sensor.lsr_{account_id}_skud_qr_code".lower().replace("-", "_")
+            skud_qr_entity_id = f"sensor.lsr_{entity_suffix}_skud_qr_code".lower().replace("-", "_")
             entities.append(
                 LSRSensor(
                     hass,
@@ -445,7 +445,6 @@ class LSRSensor(SensorEntity):
             "guestpass"] else "Unknown")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._account_id)},
-            # name=f"Счет ID {self._account_id}",
             name=coordinator.data.get(self._account_id, {}).get("account_title",
                                                                 f"ЛСР Аккаунт {self._account_id[-8:]}"),
             manufacturer="ЛСР",

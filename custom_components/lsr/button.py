@@ -23,20 +23,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class LSRForceUpdateButton(ButtonEntity):
     """Button to force update sensor data."""
 
-    def __init__(self, hass: HomeAssistant, coordinator: LSRDataUpdateCoordinator, entry_id: str):
+    def __init__(self, coordinator, account_id):
         """Initialize the button."""
-        self.hass = hass
         self._coordinator = coordinator
-        self._attr_unique_id = f"lsr_{entry_id}_force_update"
-        self._attr_name = "Force Update Sensors"
-        self._attr_icon = "mdi:refresh"
+        self._account_id = account_id
+
+        # Получаем номер л/с из координатора (должен быть добавлен в coordinator.py)
+        personal_account_number = coordinator.data.get(account_id, {}).get("personal_account_number",
+                                                                           account_id[-8:])
+        entity_suffix = personal_account_number
+
+        self._attr_unique_id = f"lsr_{entity_suffix}_force_update"
+        self._attr_entity_id = f"button.lsr_{entity_suffix}_force_update"  # ← опционально, если хочешь явный entity_id
+
+        self._attr_name = "Обновить данные"
+
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry_id)},
-            name=f"Счет ID {entry_id}",
+            identifiers={(DOMAIN, account_id)},
+            name=coordinator.data.get(account_id, {}).get("account_title", f"ЛСР Л/с №{personal_account_number}"),
             manufacturer="ЛСР",
-            model="Communal Control",
+            model="Communal Account",
         )
-        self._attr_entity_registry_enabled_default = True
+
+        self._attr_has_entity_name = False  # ← главное изменение
 
     async def async_press(self):
         """Handle the button press."""

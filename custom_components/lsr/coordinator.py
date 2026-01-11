@@ -75,7 +75,13 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     
                     parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
                     parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
-                    account_title = account["objectId"]["title"]
+
+                    # Чистый номер только цифры (для entity_id)
+                    personal_account_number = parsed_personal_account if parsed_personal_account != "Л/с не найден" else account_id[
+                        -8:]
+
+                    # Полный title для имени устройства
+                    account_title = account["objectId"]["title"]  # "Л/с №100000002184"
                     
                     _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
                 
@@ -91,8 +97,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
 
                 # Добавляем спарсенные значения в результат
                 account_data["address"] = parsed_address
+                account_data["personal_account_number"] = personal_account_number
                 account_data["account_title"] = account_title
-                account_data["personal_account"] = parsed_personal_account
                 
                 detailed_data[account_id] = account_data
             _LOGGER.debug("Fetched data: %s", detailed_data)
@@ -128,7 +134,14 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     
                     parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
                     parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
-                    
+
+                    # Чистый номер только цифры (для entity_id)
+                    personal_account_number = parsed_personal_account if parsed_personal_account != "Л/с не найден" else account_id[
+                        -8:]
+
+                    # Полный title для имени устройства
+                    account_title = account["objectId"]["title"]  # "Л/с №100000002184"
+
                     _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
                 
                 except Exception as e:
@@ -144,6 +157,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 # Добавляем спарсенные значения в результат
                 account_data["address"] = parsed_address
                 account_data["personal_account"] = parsed_personal_account
+                account_data["personal_account_number"] = personal_account_number
+                account_data["account_title"] = account_title
 
                 detailed_data[account_id] = account_data
             self.data = detailed_data
