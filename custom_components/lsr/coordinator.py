@@ -31,6 +31,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SCAN_INTERVAL = timedelta(hours=12)
 
+
 class LSRDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching LSR data."""
 
@@ -72,7 +73,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                         re.DOTALL
                     )
                     ls_match = re.search(r"Л/с №(\d+)", account["objectId"]["title"])
-                    
+
                     parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
                     parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
 
@@ -82,16 +83,17 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
 
                     # Полный title для имени устройства
                     account_title = account["objectId"]["title"]  # "Л/с №100000002184"
-                    
+
                     _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
-                
+
                 except Exception as e:
                     _LOGGER.warning("Ошибка парсинга адреса/л/с для %s: %s", account_id, e)
                     parsed_address = "Ошибка"
                     parsed_personal_account = "Ошибка"
 
-                account_data = await self.async_fetch_account_data(account_id, include_cameras=True, include_main_pass=True, include_guest_passes=True)
-                
+                account_data = await self.async_fetch_account_data(account_id, include_cameras=True,
+                                                                   include_main_pass=True, include_guest_passes=True)
+
                 # Добавляем сохранённые поля в результат
                 account_data.update(original_data)
 
@@ -99,7 +101,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 account_data["address"] = parsed_address
                 account_data["personal_account_number"] = personal_account_number
                 account_data["account_title"] = account_title
-                
+
                 detailed_data[account_id] = account_data
             _LOGGER.debug("Fetched data: %s", detailed_data)
             return detailed_data
@@ -131,7 +133,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                         re.DOTALL
                     )
                     ls_match = re.search(r"Л/с №(\d+)", account["objectId"]["title"])
-                    
+
                     parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
                     parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
 
@@ -143,17 +145,18 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     account_title = account["objectId"]["title"]  # "Л/с №100000002184"
 
                     _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
-                
+
                 except Exception as e:
                     _LOGGER.warning("Ошибка парсинга адреса/л/с для %s: %s", account_id, e)
                     parsed_address = "Ошибка"
                     parsed_personal_account = "Ошибка"
 
-                account_data = await self.async_fetch_account_data(account_id, include_cameras=False, include_main_pass=False, include_guest_passes=False)
+                account_data = await self.async_fetch_account_data(account_id, include_cameras=False,
+                                                                   include_main_pass=False, include_guest_passes=False)
 
                 # Добавляем сохранённые поля в результат
                 account_data.update(original_data)
-                
+
                 # Добавляем спарсенные значения в результат
                 account_data["address"] = parsed_address
                 account_data["personal_account"] = parsed_personal_account
@@ -179,7 +182,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 auth_data = await authenticate(self.session, login, password, self.app_instance_id)
                 self.access_token = auth_data["accessToken"]
                 self.refresh_token = auth_data["refreshToken"]
-                _LOGGER.debug("Authentication successful, access_token: %s, refresh_token: %s", self.access_token, self.refresh_token)
+                _LOGGER.debug("Authentication successful, access_token: %s, refresh_token: %s", self.access_token,
+                              self.refresh_token)
                 break
             except Exception as err:
                 _LOGGER.error("Authentication error: %s", str(err))
@@ -224,7 +228,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             "parameters": {"Authorization": f"Bearer {self.access_token}"}
         }
         try:
-            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers, timeout=10) as resp:
+            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers,
+                                         timeout=10) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get("statusCode") == 200:
@@ -260,7 +265,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             "parameters": {"Authorization": f"Bearer {self.access_token}"}
         }
         try:
-            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers, timeout=10) as resp:
+            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers,
+                                         timeout=10) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get("statusCode") == 200:
@@ -272,11 +278,11 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             return {}
 
     async def async_fetch_account_data(
-        self,
-        account_id: str,
-        include_cameras: bool = False,
-        include_main_pass: bool = False,
-        include_guest_passes: bool = False,
+            self,
+            account_id: str,
+            include_cameras: bool = False,
+            include_main_pass: bool = False,
+            include_guest_passes: bool = False,
     ) -> Dict:
         """Fetch account data with optional inclusions."""
 

@@ -17,6 +17,7 @@ from .coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(
         hass: HomeAssistant,
         entry: ConfigEntry,
@@ -34,9 +35,11 @@ async def async_setup_entry(
 
     sensor_types = {
         "address": {"name": "address", "friendly_name": "Адрес", "icon": "mdi:home", "state_class": None},
-        "personal-account": {"name": "personal_account", "friendly_name": "№ л\с", "icon": "mdi:card-account-details-outline", "state_class": None},
+        "personal-account": {"name": "personal_account", "friendly_name": "№ л\с",
+                             "icon": "mdi:card-account-details-outline", "state_class": None},
         "payment-status": {"name": "payment_status", "icon": "mdi:cash", "state_class": None},
-        "notification-count": {"name": "notification_count", "friendly_name": "Уведомления","icon": "mdi:bell", "state_class": "measurement"},
+        "notification-count": {"name": "notification_count", "friendly_name": "Уведомления", "icon": "mdi:bell",
+                               "state_class": "measurement"},
         "camera-count": {"name": "camera_count", "icon": "mdi:camera", "state_class": "measurement"}
     }
 
@@ -52,20 +55,21 @@ async def async_setup_entry(
         NUMERIC_DEFAULT = 999  # для всех счётчиков и числовых сенсоров — нормальный дефолт 0
         STRING_DEFAULT = "STRING_DEFAULT"
 
+        personal_account_number = account_data.get("personal_account_number", "unknown")
+        entity_suffix = personal_account_number if personal_account_number != "unknown" else account_id[-8:]
+
         for sensor_type, config in sensor_types.items():
             key = sensor_type.replace("-", "_")
             if sensor_type == "meter-count":
                 # Специально считаем реальное количество из "meters"
                 meters = account_data.get("meters", {})
                 state = len(meters)
-                _LOGGER.debug("Реальное количество счётчиков для %s: %d (найдено %d ключей в meters)", 
-                            account_id, state, len(meters))
+                _LOGGER.debug("Реальное количество счётчиков для %s: %d (найдено %d ключей в meters)",
+                              account_id, state, len(meters))
             else:
                 # Для остальных — обычный get с правильным дефолтом
-                state = account_data.get(key, NUMERIC_DEFAULT if sensor_type in ["notification-count", "camera-count"] else STRING_DEFAULT)
-
-            personal_account_number = account_data.get("personal_account_number", "unknown")
-            entity_suffix = personal_account_number if personal_account_number != "unknown" else account_id[-8:]
+                state = account_data.get(key, NUMERIC_DEFAULT if sensor_type in ["notification-count",
+                                                                                 "camera-count"] else STRING_DEFAULT)
 
             entity_id = f"sensor.lsr_{entity_suffix}_{sensor_type}".lower().replace("-", "_")
             unique_id = entity_id
@@ -84,7 +88,6 @@ async def async_setup_entry(
                     friendly_name=config.get("friendly_name", config["name"])
                 )
             )
-
 
         # Sensors for meters
         meters = account_data.get("meters", {})
@@ -128,30 +131,30 @@ async def async_setup_entry(
         # 2. По одному сенсору на каждый счётчик
         for meter_id, meter_data in meters.items():
             title = meter_data.get("title", "Без названия")
-            
+
             # Извлекаем чистый номер и тип для имени
             meter_number_match = re.search(r"№(\d+)", title)
             meter_number = meter_number_match.group(1) if meter_number_match else meter_id[-8:]
-            
+
             # Обрезаем всё после номера → получаем "ХВС на ГВС", "ХВС", "Отопление"
             prefix = re.sub(r"№\d+.*", "", title).strip()
             if not prefix:
                 prefix = meter_data.get("type_title", "Счётчик").split()[-1]  # fallback
-            
+
             # Имя: "Счётчик ХВС на ГВС №8358216"
             friendly_name = f"Счётчик {prefix} №{meter_number}"
-            
+
             # Чистое значение (float)
             history = meter_data.get("history", [])
             current_value = history[-1][1] if history else 0.0
-            
+
             # Единицы измерения
             unit = "м³" if meter_data.get("type_id") in ("HotWater", "ColdWater") else \
                 "Гкал" if meter_data.get("type_id") == "Heating" else ""
-            
+
             # Тип счётчика для атрибутов
             meter_type_title = meter_data.get("type_title", "Неизвестно")
-            
+
             # Дата поверки
             poverka_date = "Не указана"
             rows = meter_data.get("dataTitleCustomFields", {}).get("rows", [])
@@ -162,29 +165,29 @@ async def async_setup_entry(
                     if ": " in poverka_text:
                         poverka_date = poverka_text.split(": ", 1)[1].rstrip(".")
                     break
-            
+
             # Дата последнего показания
             last_date = "Неизвестно"
             if history:
                 last_date = history[-1][0]
-            
+
             # Уникальное имя сущности
             base_entity_id = f"lsr_{entity_suffix}_meter_{meter_number}".lower().replace("-", "_")
-            
+
             entities.append(
                 LSRSensor(
                     hass,
                     coordinator,
                     account_id,
                     f"meter-{meter_id}-value",
-                    current_value,                       # ← только число!
+                    current_value,  # ← только число!
                     f"meter_{meter_number}_value",
                     "mdi:gauge",
                     entity_id=f"sensor.{base_entity_id}_value",
                     unique_id=f"{base_entity_id}_value",
                     state_class="measurement",
-                    unit_of_measurement=unit,            # ← единицы здесь!
-                    friendly_name=friendly_name,         # ← "Счётчик ХВС на ГВС №8358216"
+                    unit_of_measurement=unit,  # ← единицы здесь!
+                    friendly_name=friendly_name,  # ← "Счётчик ХВС на ГВС №8358216"
                     extra_attributes={
                         "poverka_date": poverka_date,
                         "last_update": last_date,
@@ -203,7 +206,8 @@ async def async_setup_entry(
         done_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "Done"])
         atwork_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "AtWork"])
         onhold_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "OnHold"])
-        waiting_count = len([req for req in communal_requests if req.get("status", {}).get("id") == "WaitingForRegistration"])
+        waiting_count = len(
+            [req for req in communal_requests if req.get("status", {}).get("id") == "WaitingForRegistration"])
 
         # Словарь с локализованными названиями и иконками
         request_sensors = [
@@ -383,6 +387,7 @@ async def async_setup_entry(
     async_add_entities(entities)
     _LOGGER.debug("Added %s sensor entities", len(entities))
 
+
 class LSRSensor(SensorEntity):
     """Representation of an LSR sensor.
 
@@ -440,9 +445,9 @@ class LSRSensor(SensorEntity):
         self._attr_extra_state_attributes = extra_attributes or {}
         self._state = state if state is not None else (
             0 if sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
-            "communalrequest-count-done", "communalrequest-count-atwork",
-            "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
-            "guestpass"] else "Unknown")
+                                 "communalrequest-count-done", "communalrequest-count-atwork",
+                                 "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
+                                 "guestpass"] else "Unknown")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._account_id)},
             name=coordinator.data.get(self._account_id, {}).get("account_title",
@@ -465,7 +470,8 @@ class LSRSensor(SensorEntity):
         elif self._sensor_type == "meter-count":
             self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Счётчиков всего → Диагностика (скрыто)
 
-        elif self._sensor_type.startswith("communalrequest-count-") and self._sensor_type != "communalrequest-count-total":
+        elif self._sensor_type.startswith(
+                "communalrequest-count-") and self._sensor_type != "communalrequest-count-total":
             self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Остальные заявки → Диагностика
 
         elif self._sensor_type in ["address", "personal-account"]:
@@ -514,9 +520,9 @@ class LSRSensor(SensorEntity):
         """
         state = self._coordinator.data.get(self._account_id, {}).get(self._sensor_type, self._state)
         if self._sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
-        "communalrequest-count-done", "communalrequest-count-atwork",
-        "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
-        "guestpass"]:
+                                 "communalrequest-count-done", "communalrequest-count-atwork",
+                                 "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
+                                 "guestpass"]:
             state = int(state) if state is not None else 998
         elif self._sensor_type.endswith("-value") or self._sensor_type == "payment-due":
             state = round(float(state) if state is not None else 0.0, 4)
