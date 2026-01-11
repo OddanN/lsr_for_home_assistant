@@ -35,7 +35,7 @@ async def async_setup_entry(
 
     sensor_types = {
         "address": {"name": "address", "friendly_name": "Адрес", "icon": "mdi:home", "state_class": None},
-        "personal-account": {"name": "personal_account", "friendly_name": "№ л\с",
+        "personal-account-number": {"name": "personal_account_number", "friendly_name": "№ л\с",
                              "icon": "mdi:card-account-details-outline", "state_class": None},
         "payment-status": {"name": "payment_status", "icon": "mdi:cash", "state_class": None},
         "notification-count": {"name": "notification_count", "friendly_name": "Уведомления", "icon": "mdi:bell",
@@ -47,7 +47,7 @@ async def async_setup_entry(
         _LOGGER.debug("=== Данные аккаунта %s ===", account_id)
         _LOGGER.debug("Все доступные ключи: %s", sorted(account_data.keys()))
         _LOGGER.debug("address          → %s", account_data.get("address"))
-        _LOGGER.debug("personal_account → %s", account_data.get("personal_account"))
+        _LOGGER.debug("personal_account_number → %s", account_data.get("personal_account_number"))
         _LOGGER.debug("payment_status   → %s", account_data.get("payment_status"))
         _LOGGER.debug("notification_count → %s", account_data.get("notification_count"))
         _LOGGER.debug("Полный account_data (первые 1000 символов): %s", str(account_data))
@@ -434,6 +434,7 @@ class LSRSensor(SensorEntity):
         self._account_id = account_id
         self._sensor_type = sensor_type
         self._attr_unique_id = unique_id
+        self.entity_id = entity_id
         self._attr_name = friendly_name if friendly_name else entity_name
         self._attr_icon = icon
         if state_class:
@@ -474,7 +475,7 @@ class LSRSensor(SensorEntity):
                 "communalrequest-count-") and self._sensor_type != "communalrequest-count-total":
             self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Остальные заявки → Диагностика
 
-        elif self._sensor_type in ["address", "personal-account"]:
+        elif self._sensor_type in ["address", "personal-account-number"]:
             self._attr_entity_category = None  # Адрес и № л/с → Настройки
 
         elif self._sensor_type in ["payment-due"]:

@@ -24,7 +24,7 @@ the integration will be available to install like any other.
 After installing, you can easily configure your devices using the Integrations configuration UI (No manual YAML configuration is required).  Go to Settings / Devices & Services and press the Add Integration button, or click the shortcut button below (requires My Homeassistant configured).
 
 [![Add Integration to your Home Assistant
-instance.](https://my.home-assistant.io/badges/config_flow_start.svg?style=flat-square)](https://my.home-assistant.io/redirect/config_flow_start/?domain=lsr)
+instance.](https://my.home-assistant.io/badges/config_flow_start.svg?style=flat-square)](https://my.home-assistant.io/redirect/config_flow_start/?domain=lsr_for_home_assistant)
 
 ### Setup Wizard
 - **Username**: Your LSR account username (usually the phone number is in the format 79991234567, without the +). 
@@ -68,8 +68,17 @@ automation:
 ## Notes
 - This integration requires an active LSR account with API access.
 - The integration uses a 12-hour default scan interval, adjustable via the configuration flow.
-- For support or to report issues, please open an issue on the [GitHub repository](https://github.com/yourusername/hass-lsr/issues).
+- For support or to report issues, please open an issue on the [GitHub repository](https://github.com/OddanN/lsr_for_home_assistant/issues).
 
+## Debug
+
+For DEBUG add to `configuration.yaml`
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.lsr_for_home_assistant: debug
+```
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

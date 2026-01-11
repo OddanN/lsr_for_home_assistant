@@ -1,4 +1,4 @@
-# Version: 1.1.3
+# Version: 1.2.0
 """Custom component for LSR integration, providing camera entities."""
 
 import logging
@@ -104,6 +104,7 @@ class LSRCamera(Camera):
         self._account_id = account_id
         self._camera_id = camera_id
         self._attr_unique_id = unique_id
+        self.entity_id = entity_id
         self._attr_name = name
         self._attr_has_entity_name = False
         self._stream_url = stream_url
@@ -114,7 +115,7 @@ class LSRCamera(Camera):
             name=coordinator.data.get(self._account_id, {}).get("account_title",
                                                                 f"ЛСР Аккаунт {self._account_id[-8:]}"),
             manufacturer="ЛСР",
-            model="Communal Camera",
+            model="Communal Account",
         )
         self._attr_entity_registry_enabled_default = True
         _LOGGER.debug(
@@ -208,6 +209,7 @@ class LSRMainPassQRCamera(Camera):
         self._qr_url = qr_url
         self._text = text
         self._attr_unique_id = unique_id
+        self.entity_id = entity_id
         self._attr_name = "СКУД QR-код"
         self._attr_has_entity_name = False
         self._attr_preload_stream = False  # No streaming, static image
@@ -216,7 +218,7 @@ class LSRMainPassQRCamera(Camera):
             name=coordinator.data.get(self._account_id, {}).get("account_title",
                                                                 f"ЛСР Аккаунт {self._account_id[-8:]}"),
             manufacturer="ЛСР",
-            model="Main Pass QR",
+            model="Communal Account",
         )
         self._attr_entity_registry_enabled_default = True
         _LOGGER.debug(

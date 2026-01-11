@@ -1,11 +1,11 @@
-# Version: 1.1.3
+# Version: 1.2.0
 """Constants and utility functions for the LSR integration.
 
 This module defines constants such as domain, API URL, namespace, and default scan interval,
 along with a transliteration function for converting Russian text to Latin for unique IDs.
 """
 
-DOMAIN = "lsr"
+DOMAIN = "lsr_for_home_assistant"
 API_URL = "https://mp.lsr.ru/api/rpc"
 # noinspection HttpUrlsUsage
 NAMESPACE = "http://www.lsr.ru/estate/headlessCMS"
