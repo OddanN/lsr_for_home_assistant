@@ -130,6 +130,7 @@ async def async_setup_entry(
 
         # 2. По одному сенсору на каждый счётчик
         for meter_id, meter_data in meters.items():
+            _LOGGER.debug("meter_id %s: %s", meter_id, meter_data)
             title = meter_data.get("title", "Без названия")
 
             # Извлекаем чистый номер и тип для имени
@@ -148,9 +149,25 @@ async def async_setup_entry(
             history = meter_data.get("history", [])
             current_value = history[-1][1] if history else 0.0
 
-            # Единицы измерения
-            unit = "м³" if meter_data.get("type_id") in ("HotWater", "ColdWater") else \
-                "Гкал" if meter_data.get("type_id") == "Heating" else ""
+            # Единицы измерения — только стандартные для HA!
+            unit = None
+            device_class = None
+            state_class = "total_increasing"
+
+            type_id = meter_data.get("type_id")
+            if type_id in ("HotWater", "ColdWater"):
+                unit = "m³" # ← английская "m³"
+                device_class = SensorDeviceClass.VOLUME
+                state_class = "total_increasing"    # ← накопительное значение!
+            elif type_id == "Heating":
+                unit = "Gcal"   # ← стандартная для Гкал
+                device_class = SensorDeviceClass.ENERGY
+                state_class = "total_increasing"
+            elif type_id == "Electricity":
+                unit = "kWh"
+                device_class = SensorDeviceClass.ENERGY
+                state_class = "total_increasing"
+            _LOGGER.debug("meter unit_of_measurement %s: type_id=%s, unit=%s, device_class=%s, state_class=%s", meter_id, type_id, unit, device_class, state_class)
 
             # Тип счётчика для атрибутов
             meter_type_title = meter_data.get("type_title", "Неизвестно")
@@ -185,8 +202,9 @@ async def async_setup_entry(
                     "mdi:gauge",
                     entity_id=f"sensor.{base_entity_id}_value",
                     unique_id=f"{base_entity_id}_value",
-                    state_class="measurement",
+                    state_class=state_class,
                     unit_of_measurement=unit,  # ← единицы здесь!
+                    device_class=device_class,
                     friendly_name=friendly_name,  # ← "Счётчик ХВС на ГВС №8358216"
                     extra_attributes={
                         "poverka_date": poverka_date,
@@ -408,6 +426,7 @@ class LSRSensor(SensorEntity):
             state_class: str = None,
             entity_category: EntityCategory = None,
             unit_of_measurement: str = None,
+            device_class: str = None,
             extra_attributes: dict = None,
             friendly_name: str = None
     ) -> None:
@@ -437,6 +456,8 @@ class LSRSensor(SensorEntity):
         self.entity_id = entity_id
         self._attr_name = friendly_name if friendly_name else entity_name
         self._attr_icon = icon
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit_of_measurement
         if state_class:
             try:
                 self._attr_state_class = SensorStateClass(state_class)
