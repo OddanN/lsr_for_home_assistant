@@ -37,7 +37,7 @@ async def async_setup_entry(
         "address": {"name": "address", "friendly_name": "Адрес", "icon": "mdi:home", "state_class": None},
         "personal-account-number": {"name": "personal_account_number", "friendly_name": "№ л\с",
                              "icon": "mdi:card-account-details-outline", "state_class": None},
-        "payment-status": {"name": "payment_status", "icon": "mdi:cash", "state_class": None},
+        "payment-status": {"name": "payment_status", "friendly_name": "Статус оплаты", "icon": "mdi:cash", "state_class": None},
         "notification-count": {"name": "notification_count", "friendly_name": "Уведомления", "icon": "mdi:bell",
                                "state_class": "measurement"},
         "camera-count": {"name": "camera_count", "icon": "mdi:camera", "state_class": "measurement"}
@@ -340,7 +340,9 @@ async def async_setup_entry(
                     "mdi:cash",
                     entity_id=sensor_payment_due,
                     unique_id=sensor_payment_due,
-                    state_class="measurement",
+                    friendly_name="Последнее начисление",
+                    unit_of_measurement="₽",
+                    device_class=SensorDeviceClass.MONETARY,
                     extra_attributes=extra_attributes
                 )
             )

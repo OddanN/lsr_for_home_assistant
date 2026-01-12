@@ -194,25 +194,6 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 await asyncio.sleep(15)
                 attempt += 1
 
-    @staticmethod
-    def _extract_payment_status(title_custom_fields: Dict) -> str:
-        """Extract payment status from titleCustomFields.
-
-        Args:
-            title_custom_fields (dict): The dictionary containing custom fields from the API response.
-
-        Returns:
-            str: The extracted payment status or 'Unknown' if not found.
-        """
-        for row in title_custom_fields.get("rows", []):
-            if row.get("isVisible") is True:
-                value = row["cells"][0]["value"]
-                match = re.search(r'<span[^>]*>(.*?)</span>', value)
-                if match:
-                    return match.group(1).strip()
-                return value.strip()
-        return "Unknown"
-
     async def _get_camera_stream_url(self, camera: Dict, headers: Dict) -> None:
         """Fetch stream URL for a single camera asynchronously."""
         await get_camera_stream_url(self.session, camera, headers)
@@ -353,23 +334,34 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             }
 
         # -------- НАЧИСЛЕНИЯ / ЛИЦЕВОЙ СЧЁТ --------
-        items = account_data.get("items", [])
-
-        valid_items = [
-            item for item in items
+        accruals = [
+            item for item in account_data.get("items", [])
             if item.get("communalAccount", {}).get("title")
         ]
 
         communal_account = next(
-            (item["communalAccount"] for item in valid_items),
+            (item["communalAccount"] for item in accruals),
             None
         )
 
         if not communal_account:
-            _LOGGER.warning(
-                "No valid accrual items with communalAccount.title for account %s",
-                account_id,
-            )
+            _LOGGER.warning("No valid accrual items for account %s", account_id)
+
+        # Парсим payment_status из самого свежего начисления
+        payment_status = "Unknown"
+        if accruals:
+            latest = accruals[0]  # самое свежее начисление
+            rows = latest.get("listFields", {}).get("rows", [])
+            for row in rows:
+                if row.get("isVisible") is True:
+                    cells = row.get("cells", [])
+                    if cells and len(cells) > 0:
+                        value = cells[0].get("value", "")
+                        if value:
+                            clean = re.sub(r"<[^>]+>", "", value).strip()
+                            payment_status = clean
+                            _LOGGER.debug("Найден payment_status: %s", payment_status)
+                            break
 
         # -------- КАМЕРЫ --------
         cameras = []
@@ -380,11 +372,11 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
         result = {
             "id": communal_account.get("id", account_id) if communal_account else account_id,
             "number": communal_account.get("title", f"Л/с №{account_id}") if communal_account else f"Л/с №{account_id}",
-            "payment_status": self._extract_payment_status(account_data.get("optionalObject", {})),
+            "payment_status": payment_status,
             "notification_count": account_data.get("notificationCount", 0),
             "camera_count": len(cameras),
             "cameras": cameras,
-            "accruals": valid_items,
+            "accruals": accruals,
             "communal_requests": communal_requests,
             "meters": meters_history,
             "main_pass": {} if not include_main_pass else await self.async_get_main_pass_data(account_id),
