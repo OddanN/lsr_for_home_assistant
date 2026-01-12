@@ -283,49 +283,49 @@ async def async_setup_entry(
                 )
             )
 
-        # New sensor for payment due
-        accruals = account_data.get("accruals", [])
-        if accruals:
-            _LOGGER.debug("accruals: %s", accruals)
+            # New sensor for payment due
+            accruals = account_data.get("accruals", [])
+            if accruals:
+                _LOGGER.debug("accruals: %s", accruals)
 
-            # Берём только валидные начисления (где есть title)
-            latest_accrual = accruals[0]
+                # Берём только валидные начисления
+                latest_accrual = accruals[0]
 
-            # ---------- Сумма начисления ----------
-            amount = 0.0
-            amount_cell = latest_accrual.get("listFields", {}) \
-                .get("rows", [{}])[0] \
-                .get("cells", [{}, {}])[1] \
-                .get("value", "")
+                # ---------- Сумма последнего начисления ----------
+                amount = 0.0
+                amount_cell = latest_accrual.get("listFields", {}) \
+                    .get("rows", [{}])[0] \
+                    .get("cells", [{}, {}])[1] \
+                    .get("value", "")
 
-            amount_text = re.sub(r"<[^>]+>", "", amount_cell)
+                amount_text = re.sub(r"<[^>]+>", "", amount_cell)
+                amount_match = re.search(r"Начислено\s*([\d.,]+)", amount_text)
+                if amount_match:
+                    amount = float(amount_match.group(1).replace(",", "."))
 
-            amount_match = re.search(r"Начислено\s*([\d.,]+)", amount_text)
-            if amount_match:
-                amount = float(amount_match.group(1).replace(",", "."))
-
-            # ---------- Атрибуты ----------
-            extra_attributes = {}
-
-            for accrual in accruals:
-                _LOGGER.debug("accrual: %s", accrual)
-                accrual_id = accrual["objectId"]["id"]
-
-                # Дата
-                date_cell = accrual["listFields"]["rows"][0]["cells"][0]["value"]
-
-                date_text = re.sub(r"<[^>]+>", "", date_cell)
-
-                # Сумма
-                value_cell = accrual["listFields"]["rows"][0]["cells"][1]["value"]
-
-                value_text = re.sub(r"<[^>]+>", "", value_cell)
-                value_match = re.search(r"Начислено\s*([\d.,]+)", value_text)
-
-                extra_attributes[accrual_id] = {
-                    "date": date_text.strip(),
-                    "amount": value_match.group(1) if value_match else None
+                # ---------- Красивые атрибуты: месяц + сумма в нужном формате ----------
+                extra_attributes = {
+                    "account_id": account_id,
+                    "sensor_type": "payment-due"
                 }
+
+                for accrual in accruals:
+                    accrual_id = accrual["objectId"]["id"]
+
+                    # Дата начисления (из первой ячейки первой строки)
+                    date_cell = accrual["listFields"]["rows"][0]["cells"][0]["value"]
+                    date_text = re.sub(r"<[^>]+>", "", date_cell).strip()
+
+                    # Сумма начисления (из второй ячейки первой строки)
+                    value_cell = accrual["listFields"]["rows"][0]["cells"][1]["value"]
+                    value_text = re.sub(r"<[^>]+>", "", value_cell).strip()
+                    value_match = re.search(r"Начислено\s*([\d.,]+)", value_text)
+                    amount_str = value_match.group(1) if value_match else "0"
+
+                    # Формируем ключ вида "Декабрь 2025"
+                    month_year = date_text  # уже "Декабрь 2025" и т.п.
+
+                    extra_attributes[month_year] = f"{amount_str} ₽"
 
             sensor_payment_due = f"sensor.lsr_{entity_suffix}_payment_due".lower().replace("-", "_")
 
@@ -370,19 +370,19 @@ async def async_setup_entry(
                 guest_list.append(pass_str)
 
             # Создаём сенсор
-            skud_qr_entity_id = f"sensor.lsr_{entity_suffix}_skud_qr_code".lower().replace("-", "_")
+            skud_qr_entity_id = f"sensor.lsr_{entity_suffix}_skud".lower().replace("-", "_")
             entities.append(
                 LSRSensor(
                     hass,
                     coordinator,
                     account_id,
-                    "skud-qr-code",
+                    "skud",
                     pin_code,  # ← состояние = ПИН-код
-                    "skud_qr_code",
+                    "skud",
                     "mdi:qrcode",
                     entity_id=skud_qr_entity_id,
                     unique_id=skud_qr_entity_id,
-                    friendly_name="СКУД QR-код",
+                    friendly_name="СКУД",
                     extra_attributes={
                         "guest_passes_count": guest_count,
                         "guest_passes": guest_list,
@@ -467,36 +467,44 @@ class LSRSensor(SensorEntity):
             manufacturer="ЛСР",
             model="Communal Account",
         )
-        self._attr_entity_registry_enabled_default = True
+        # Автоматическое распределение по категориям + отключение по умолчанию
+        if self._sensor_type in [
+            "communalrequest-count-done",
+            "communalrequest-count-atwork",
+            "communalrequest-count-onhold",
+            "communalrequest-count-waitingforregistration",
+            "meter-count"
+        ]:
+            self._attr_entity_registry_enabled_default = False   # ← отключены по умолчанию
+        else:
+            self._attr_entity_registry_enabled_default = True
 
         # Автоматическое распределение по категориям Home Assistant
-        if self._sensor_type in ["mainpass-pin", "guestpass"]:
-            self._attr_entity_category = None  # СКУД → основной список (visible)
+        VISIBLE_TYPES = {
+            "mainpass-pin", "guestpass",
+            "payment-status",
+            "address", "personal-account-number"
+        }
 
-        elif self._sensor_type == "payment-status":
-            self._attr_entity_category = None  # Статус оплаты → основной список
+        DIAGNOSTIC_TYPES = {
+            "communalrequest-count-total",
+            "notification-count", "camera-count",
+            "payment-due"
+        }
 
-        elif self._sensor_type == "communalrequest-count-total":
-            self._attr_entity_category = None  # Заявки всего → основной список
+        DIAGNOSTIC_PREFIXES = ("communalrequest-count-", "meter-")
 
-        elif self._sensor_type == "meter-count":
-            self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Счётчиков всего → Диагностика (скрыто)
+        if self._sensor_type in VISIBLE_TYPES:
+            self._attr_entity_category = None
 
-        elif self._sensor_type.startswith(
-                "communalrequest-count-") and self._sensor_type != "communalrequest-count-total":
-            self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Остальные заявки → Диагностика
-
-        elif self._sensor_type in ["address", "personal-account-number"]:
-            self._attr_entity_category = None  # Адрес и № л/с → Настройки
-
-        elif self._sensor_type in ["payment-due"]:
-            self._attr_entity_category = EntityCategory.DIAGNOSTIC  # Сумма к оплате → Диагностика
-
-        elif self._sensor_type.startswith("meter-") and "-value" in self._sensor_type:
-            self._attr_entity_category = None  # Показания отдельных счётчиков → основной список
+        elif (
+            self._sensor_type in DIAGNOSTIC_TYPES
+            or self._sensor_type.startswith(DIAGNOSTIC_PREFIXES)
+        ):
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
         else:
-            self._attr_entity_category = None  # Всё остальное — основной список
+            self._attr_entity_category = None
 
     @property
     def available(self) -> bool:

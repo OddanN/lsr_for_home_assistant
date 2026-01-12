@@ -27,7 +27,7 @@ After installing, you can easily configure your devices using the Integrations c
 instance.](https://my.home-assistant.io/badges/config_flow_start.svg?style=flat-square)](https://my.home-assistant.io/redirect/config_flow_start/?domain=lsr_for_home_assistant)
 
 ### Setup Wizard
-- **Username**: Your LSR account username (usually the phone number is in the format 79991234567, without the +). 
+- **Username**: Your LSR account username (usually the phone number). 
 - **Password**: Your LSR account password.
 - **Scan Interval**: Optional field to set the update interval (default is 12 hours, minimum 1 hour).
 
