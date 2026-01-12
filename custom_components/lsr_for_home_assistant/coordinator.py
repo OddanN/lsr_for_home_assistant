@@ -31,6 +31,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SCAN_INTERVAL = timedelta(hours=12)
 
+
 class LSRDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching LSR data."""
 
@@ -72,7 +73,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                         re.DOTALL
                     )
                     ls_match = re.search(r"Л/с №(\d+)", account["objectId"]["title"])
-                    
+
                     parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
                     parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
 
@@ -82,16 +83,17 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
 
                     # Полный title для имени устройства
                     account_title = account["objectId"]["title"]  # "Л/с №100000002184"
-                    
+
                     _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
-                
+
                 except Exception as e:
                     _LOGGER.warning("Ошибка парсинга адреса/л/с для %s: %s", account_id, e)
                     parsed_address = "Ошибка"
                     parsed_personal_account = "Ошибка"
 
-                account_data = await self.async_fetch_account_data(account_id, include_cameras=True, include_main_pass=True, include_guest_passes=True)
-                
+                account_data = await self.async_fetch_account_data(account_id, include_cameras=True,
+                                                                   include_main_pass=True, include_guest_passes=True)
+
                 # Добавляем сохранённые поля в результат
                 account_data.update(original_data)
 
@@ -99,7 +101,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 account_data["address"] = parsed_address
                 account_data["personal_account_number"] = personal_account_number
                 account_data["account_title"] = account_title
-                
+
                 detailed_data[account_id] = account_data
             _LOGGER.debug("Fetched data: %s", detailed_data)
             return detailed_data
@@ -131,7 +133,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                         re.DOTALL
                     )
                     ls_match = re.search(r"Л/с №(\d+)", account["objectId"]["title"])
-                    
+
                     parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
                     parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
 
@@ -143,17 +145,18 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     account_title = account["objectId"]["title"]  # "Л/с №100000002184"
 
                     _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
-                
+
                 except Exception as e:
                     _LOGGER.warning("Ошибка парсинга адреса/л/с для %s: %s", account_id, e)
                     parsed_address = "Ошибка"
                     parsed_personal_account = "Ошибка"
 
-                account_data = await self.async_fetch_account_data(account_id, include_cameras=False, include_main_pass=False, include_guest_passes=False)
+                account_data = await self.async_fetch_account_data(account_id, include_cameras=False,
+                                                                   include_main_pass=False, include_guest_passes=False)
 
                 # Добавляем сохранённые поля в результат
                 account_data.update(original_data)
-                
+
                 # Добавляем спарсенные значения в результат
                 account_data["address"] = parsed_address
                 account_data["personal_account"] = parsed_personal_account
@@ -179,7 +182,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 auth_data = await authenticate(self.session, login, password, self.app_instance_id)
                 self.access_token = auth_data["accessToken"]
                 self.refresh_token = auth_data["refreshToken"]
-                _LOGGER.debug("Authentication successful, access_token: %s, refresh_token: %s", self.access_token, self.refresh_token)
+                _LOGGER.debug("Authentication successful, access_token: %s, refresh_token: %s", self.access_token,
+                              self.refresh_token)
                 break
             except Exception as err:
                 _LOGGER.error("Authentication error: %s", str(err))
@@ -189,25 +193,6 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning("Retrying authentication (attempt %d of %d) in 15 seconds...", attempt, max_attempts)
                 await asyncio.sleep(15)
                 attempt += 1
-
-    @staticmethod
-    def _extract_payment_status(title_custom_fields: Dict) -> str:
-        """Extract payment status from titleCustomFields.
-
-        Args:
-            title_custom_fields (dict): The dictionary containing custom fields from the API response.
-
-        Returns:
-            str: The extracted payment status or 'Unknown' if not found.
-        """
-        for row in title_custom_fields.get("rows", []):
-            if row.get("isVisible") is True:
-                value = row["cells"][0]["value"]
-                match = re.search(r'<span[^>]*>(.*?)</span>', value)
-                if match:
-                    return match.group(1).strip()
-                return value.strip()
-        return "Unknown"
 
     async def _get_camera_stream_url(self, camera: Dict, headers: Dict) -> None:
         """Fetch stream URL for a single camera asynchronously."""
@@ -224,7 +209,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             "parameters": {"Authorization": f"Bearer {self.access_token}"}
         }
         try:
-            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers, timeout=10) as resp:
+            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers,
+                                         timeout=10) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get("statusCode") == 200:
@@ -260,7 +246,8 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             "parameters": {"Authorization": f"Bearer {self.access_token}"}
         }
         try:
-            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers, timeout=10) as resp:
+            async with self.session.post("https://mp.lsr.ru/api/rpc", json=payload, headers=headers,
+                                         timeout=10) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if data.get("statusCode") == 200:
@@ -272,11 +259,11 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             return {}
 
     async def async_fetch_account_data(
-        self,
-        account_id: str,
-        include_cameras: bool = False,
-        include_main_pass: bool = False,
-        include_guest_passes: bool = False,
+            self,
+            account_id: str,
+            include_cameras: bool = False,
+            include_main_pass: bool = False,
+            include_guest_passes: bool = False,
     ) -> Dict:
         """Fetch account data with optional inclusions."""
 
@@ -317,6 +304,24 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             if last_value_raw and last_date:
                 history_dict[last_date] = float(last_value_raw.replace(",", "."))
 
+            # Дата поверки
+                poverka_date = "Не указана"
+                rows = meter.get("dataTitleCustomFields", {}).get("rows", [])
+                if len(rows) >= 3:
+                    third_row = rows[2]
+                    cells = third_row.get("cells", [])
+                    if cells:
+                        cell_value = cells[0].get("value", "")
+                        if cell_value:
+                            clean_text = re.sub(r"<[^>]+>", "", cell_value).strip()
+                            if ":" in clean_text:
+                                parts = clean_text.split(":", 1)
+                                if len(parts) == 2:
+                                    date_part = parts[1].strip().rstrip(".")
+                                    if re.match(r"^\d{2}\.\d{2}\.\d{4}$", date_part):
+                                        poverka_date = date_part
+                                        _LOGGER.debug("Найдена дата поверки для %s: %s", meter_id, poverka_date)
+
             meters_history[meter_id] = {
                 "title": object_id.get("title", "Unknown"),
                 "type_id": meter.get("type", {}).get("id"),
@@ -325,26 +330,38 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     history_dict.items(),
                     key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"),
                 ),
+                "poverka_date": poverka_date
             }
 
         # -------- НАЧИСЛЕНИЯ / ЛИЦЕВОЙ СЧЁТ --------
-        items = account_data.get("items", [])
-
-        valid_items = [
-            item for item in items
+        accruals = [
+            item for item in account_data.get("items", [])
             if item.get("communalAccount", {}).get("title")
         ]
 
         communal_account = next(
-            (item["communalAccount"] for item in valid_items),
+            (item["communalAccount"] for item in accruals),
             None
         )
 
         if not communal_account:
-            _LOGGER.warning(
-                "No valid accrual items with communalAccount.title for account %s",
-                account_id,
-            )
+            _LOGGER.warning("No valid accrual items for account %s", account_id)
+
+        # Парсим payment_status из самого свежего начисления
+        payment_status = "Unknown"
+        if accruals:
+            latest = accruals[0]  # самое свежее начисление
+            rows = latest.get("listFields", {}).get("rows", [])
+            for row in rows:
+                if row.get("isVisible") is True:
+                    cells = row.get("cells", [])
+                    if cells and len(cells) > 0:
+                        value = cells[0].get("value", "")
+                        if value:
+                            clean = re.sub(r"<[^>]+>", "", value).strip()
+                            payment_status = clean
+                            _LOGGER.debug("Найден payment_status: %s", payment_status)
+                            break
 
         # -------- КАМЕРЫ --------
         cameras = []
@@ -355,11 +372,11 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
         result = {
             "id": communal_account.get("id", account_id) if communal_account else account_id,
             "number": communal_account.get("title", f"Л/с №{account_id}") if communal_account else f"Л/с №{account_id}",
-            "payment_status": self._extract_payment_status(account_data.get("optionalObject", {})),
+            "payment_status": payment_status,
             "notification_count": account_data.get("notificationCount", 0),
             "camera_count": len(cameras),
             "cameras": cameras,
-            "accruals": valid_items,
+            "accruals": accruals,
             "communal_requests": communal_requests,
             "meters": meters_history,
             "main_pass": {} if not include_main_pass else await self.async_get_main_pass_data(account_id),

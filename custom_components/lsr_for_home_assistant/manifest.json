@@ -1,5 +1,5 @@
 {
-  "domain": "lsr",
+  "domain": "lsr_for_home_assistant",
   "name": "LSR Integration for HA",
   "version": "1.2.0",
   "config_flow": true,
@@ -19,7 +19,7 @@
   "zeroconf": [],
   "ssdp": [],
   "usb": [],
-  "loggers": ["custom_components.lsr"],
+  "loggers": ["custom_components.lsr_for_home_assistant"],
   "platforms": [
     "sensor",
     "button",
