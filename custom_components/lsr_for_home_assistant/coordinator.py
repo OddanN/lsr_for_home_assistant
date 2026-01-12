@@ -367,6 +367,24 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
         cameras = []
         if include_cameras:
             cameras = await get_cameras(self.session, self.access_token, account_id)
+        # Получаем реальные stream_url для каждой камеры
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        }
+
+        for camera in cameras:
+            if "videoUrl" in camera and camera["videoUrl"]:
+                await get_camera_stream_url(self.session, camera, headers)
+                _LOGGER.debug(
+                    "Camera %s (%s): videoUrl → stream_url = %s",
+                    camera.get("id"),
+                    camera.get("title"),
+                    camera.get("stream_url", "<empty>")
+                )
+            else:
+                _LOGGER.warning("Camera %s has no videoUrl", camera.get("id"))
 
         # -------- РЕЗУЛЬТАТ --------
         result = {

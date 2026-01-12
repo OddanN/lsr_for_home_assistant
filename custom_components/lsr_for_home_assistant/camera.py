@@ -1,8 +1,8 @@
-# Version: 1.2.0
+# Version: 1.2.2
 """Custom component for LSR integration, providing camera entities."""
 
 import logging
-from homeassistant.components.camera import Camera
+from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
@@ -12,10 +12,11 @@ from .coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        async_add_entities,
 ) -> None:
     """Set up the LSR camera platform.
 
@@ -36,10 +37,12 @@ async def async_setup_entry(
             stream_url = camera.get("stream_url")
             preview_url = camera.get("preview")
             if not stream_url or not isinstance(stream_url, str):
-                _LOGGER.warning("Invalid or missing stream_url for camera %s (account %s)", camera.get("id"), account_id)
+                _LOGGER.warning("Invalid or missing stream_url for camera %s (account %s)", camera.get("id"),
+                                account_id)
                 continue
             if not preview_url or not isinstance(preview_url, str):
-                _LOGGER.warning("Invalid or missing preview_url for camera %s (account %s)", camera.get("id"), account_id)
+                _LOGGER.warning("Invalid or missing preview_url for camera %s (account %s)", camera.get("id"),
+                                account_id)
                 preview_url = None
             entity_id = f"camera.lsr_{entity_suffix}_camera_{camera['id']}".lower().replace("-", "_")
             entities.append(
@@ -73,35 +76,24 @@ async def async_setup_entry(
     async_add_entities(entities)
     _LOGGER.debug("Added %s camera entities", len(entities))
 
-class LSRCamera(Camera):
-    """Representation of an LSR camera.
 
-    This class handles the creation and management of camera entities for the LSR integration.
-    """
+class LSRCamera(Camera):
+    """Representation of an LSR camera."""
+
+    _attr_supported_features = CameraEntityFeature.STREAM
 
     def __init__(
-        self,
-        coordinator: LSRDataUpdateCoordinator,
-        account_id: str,
-        camera_id: str,
-        name: str,
-        stream_url: str,
-        preview_url: str | None,
-        entity_id: str,
-        unique_id: str,
+            self,
+            coordinator: LSRDataUpdateCoordinator,
+            account_id: str,
+            camera_id: str,
+            name: str,
+            stream_url: str,
+            preview_url: str | None,
+            entity_id: str,
+            unique_id: str,
     ) -> None:
-        """Initialize the camera.
-
-        Args:
-            coordinator (LSRDataUpdateCoordinator): The data coordinator for the integration.
-            account_id (str): The account ID associated with the camera.
-            camera_id (str): The unique ID of the camera.
-            name (str): The name of the camera.
-            stream_url (str): The URL for the camera stream.
-            preview_url (str | None): The URL for the camera preview image, if available.
-            entity_id (str): The entity ID for the camera.
-            unique_id (str): The unique ID for the camera.
-        """
+        """Initialize the camera."""
         super().__init__()
         self._coordinator = coordinator
         self._account_id = account_id
@@ -113,6 +105,7 @@ class LSRCamera(Camera):
         self._stream_url = stream_url
         self._preview_url = preview_url
         self._attr_preload_stream = True
+        self._stream = None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._account_id)},
             name=coordinator.data.get(self._account_id, {}).get("account_title",
@@ -122,30 +115,18 @@ class LSRCamera(Camera):
         )
         self._attr_entity_registry_enabled_default = True
         _LOGGER.debug(
-            "Initialized camera %s with unique_id %s, entity_id=%s (not set directly), stream_url: %s, preview: %s, preload_stream: %s",
-            self._attr_name, self._attr_unique_id, entity_id, self._stream_url, self._preview_url, self._attr_preload_stream
+            "Initialized camera %s with unique_id %s, entity_id=%s, stream_url: %s",
+            self._attr_name, self._attr_unique_id, entity_id, self._stream_url
         )
 
     @property
     def available(self) -> bool:
-        """Return if entity is available.
-
-        Returns:
-            bool: True if the stream URL is available, false otherwise.
-        """
+        """Return if entity is available."""
         is_available = bool(self._stream_url)
         return is_available
 
     async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
-        """Return bytes of camera image.
-
-        Args:
-            width (int | None): The requested width of the image.
-            height (int | None): The requested height of the image.
-
-        Returns:
-            bytes | None: The image data if successful, none otherwise.
-        """
+        """Return bytes of camera image."""
         if not self._preview_url:
             _LOGGER.debug("No preview URL for camera %s", self._camera_id)
             return None
@@ -159,23 +140,71 @@ class LSRCamera(Camera):
             _LOGGER.error("Error fetching camera image for %s: %s", self._camera_id, err)
             return None
 
-    @property
-    def stream_source(self) -> str | None:
+    async def stream_source(self) -> str | None:
         """Return the stream source URL.
 
-        Returns:
-            str | None: The stream URL if available, none otherwise.
+        ВНИМАНИЕ: Это должен быть асинхронный метод, а не свойство!
+        Home Assistant вызывает его как async метод.
         """
-        _LOGGER.debug("Attempting to provide stream source for %s: %s", self._attr_unique_id, self._stream_url)
+        _LOGGER.debug("Providing stream source for %s: %s", self._attr_unique_id, self._stream_url)
         return self._stream_url if self._stream_url else None
+
+    async def async_create_stream(self):
+        """Create a stream."""
+        try:
+            # В Home Assistant 2025 API мог измениться
+            # Попробуем разные варианты импорта
+            from homeassistant.components.stream import create_stream
+
+            if not self._stream_url:
+                return None
+
+            if self._stream is None:
+                self._stream = create_stream(
+                    self.hass,
+                    self._stream_url,
+                    options={
+                        "use_wallclock_as_timestamps": True,
+                    }
+                )
+                _LOGGER.debug("Stream created for %s", self._attr_unique_id)
+        except ImportError as err:
+            _LOGGER.debug("First import method failed: %s", err)
+            try:
+                # Альтернативный вариант импорта
+                from homeassistant.components.stream import async_create_stream as create_stream
+
+                if self._stream is None:
+                    self._stream = create_stream(
+                        self.hass,
+                        self._stream_url,
+                        options={
+                            "use_wallclock_as_timestamps": True,
+                        }
+                    )
+                    _LOGGER.debug("Stream created (alt import) for %s", self._attr_unique_id)
+            except ImportError as err2:
+                _LOGGER.error("Cannot import stream creation function: %s", err2)
+                return None
+        except Exception as err:
+            _LOGGER.error("Failed to create stream for %s: %s", self._attr_unique_id, err)
+            return None
+
+        return self._stream
+
+    async def async_handle_web_rtc_offer(self, offer_sdp: str) -> str | None:
+        """Handle WebRTC offer for HLS stream."""
+        stream = await self.async_create_stream()
+        if stream:
+            try:
+                return await stream.async_handle_web_rtc_offer(offer_sdp)
+            except Exception as err:
+                _LOGGER.error("Error handling WebRTC offer for %s: %s", self._attr_unique_id, err)
+        return None
 
     @property
     def extra_state_attributes(self):
-        """Return the state attributes.
-
-        Returns:
-            dict: Additional attributes for the camera entity.
-        """
+        """Return the state attributes."""
         return {
             "account_id": self._account_id,
             "camera_id": self._camera_id,
@@ -184,28 +213,20 @@ class LSRCamera(Camera):
             "preload_stream": self._attr_preload_stream,
         }
 
+
 class LSRMainPassQRCamera(Camera):
     """Representation of an LSR main pass QR code as a camera."""
 
     def __init__(
-        self,
-        coordinator: LSRDataUpdateCoordinator,
-        account_id: str,
-        qr_url: str,
-        text: str,
-        entity_id: str,
-        unique_id: str,
+            self,
+            coordinator: LSRDataUpdateCoordinator,
+            account_id: str,
+            qr_url: str,
+            text: str,
+            entity_id: str,
+            unique_id: str,
     ) -> None:
-        """Initialize the QR camera.
-
-        Args:
-            coordinator (LSRDataUpdateCoordinator): The data coordinator for the integration.
-            account_id (str): The account ID associated with the camera.
-            qr_url (str): The URL of the QR code image.
-            text (str): The text associated with the main pass.
-            entity_id (str): The entity ID for the camera.
-            unique_id (str): The unique ID for the camera.
-        """
+        """Initialize the QR camera."""
         super().__init__()
         self._coordinator = coordinator
         self._account_id = account_id
@@ -215,7 +236,7 @@ class LSRMainPassQRCamera(Camera):
         self.entity_id = entity_id
         self._attr_name = "СКУД QR-код"
         self._attr_has_entity_name = False
-        self._attr_preload_stream = False  # No streaming, static image
+        self._attr_preload_stream = False
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._account_id)},
             name=coordinator.data.get(self._account_id, {}).get("account_title",
@@ -225,29 +246,17 @@ class LSRMainPassQRCamera(Camera):
         )
         self._attr_entity_registry_enabled_default = True
         _LOGGER.debug(
-            "Initialized QR camera %s with unique_id %s, entity_id=%s (not set directly), qr_url: %s",
+            "Initialized QR camera %s with unique_id %s, entity_id=%s, qr_url: %s",
             self._attr_name, self._attr_unique_id, entity_id, self._qr_url
         )
 
     @property
     def available(self) -> bool:
-        """Return if entity is available.
-
-        Returns:
-            bool: True if the QR URL is available, false otherwise.
-        """
+        """Return if entity is available."""
         return bool(self._qr_url)
 
     async def async_camera_image(self, width: int | None = None, height: int | None = None) -> bytes | None:
-        """Return bytes of QR code image.
-
-        Args:
-            width (int | None): The requested width of the image.
-            height (int | None): The requested height of the image.
-
-        Returns:
-            bytes | None: The image data if successful, none otherwise.
-        """
+        """Return bytes of QR code image."""
         if not self._qr_url:
             _LOGGER.debug("No QR URL for camera %s", self._attr_unique_id)
             return None
@@ -261,13 +270,13 @@ class LSRMainPassQRCamera(Camera):
             _LOGGER.error("Error fetching QR image for %s: %s", self._attr_unique_id, err)
             return None
 
+    async def stream_source(self) -> str | None:
+        """QR camera doesn't support streaming."""
+        return None
+
     @property
     def extra_state_attributes(self):
-        """Return the state attributes.
-
-        Returns:
-            dict: Additional attributes for the QR camera entity.
-        """
+        """Return the state attributes."""
         return {
             "account_id": self._account_id,
             "qr_url": self._qr_url,
