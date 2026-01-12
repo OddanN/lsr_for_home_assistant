@@ -93,10 +93,6 @@ async def async_setup_entry(
         meters = account_data.get("meters", {})
         meter_count = len(meters)
 
-        # 1. Общий счётчик количества приборов
-        meters = account_data.get("meters", {})
-        meter_count = len(meters)
-
         # Собираем список названий всех счётчиков для атрибута
         all_meters_list = []
         for meter_id, meter_data in meters.items():
@@ -104,7 +100,7 @@ async def async_setup_entry(
             meter_type_title = meter_data.get("type_title", "Неизвестно")
             meter_str = f"{title} ({meter_type_title})"
             all_meters_list.append(meter_str)
-        _LOGGER.debug("Собрано all_meters для %s: %s", account_id, all_meters_list)
+        _LOGGER.debug("Собрано all_meters для %s: all_meters_list - %s, meters - %s", account_id, all_meters_list, meters)
 
         # Создаём сенсор количества
         meter_count_entity_id = f"sensor.lsr_{entity_suffix}_meter_count".lower().replace("-", "_")
@@ -172,16 +168,8 @@ async def async_setup_entry(
             # Тип счётчика для атрибутов
             meter_type_title = meter_data.get("type_title", "Неизвестно")
 
-            # Дата поверки
-            poverka_date = "Не указана"
-            rows = meter_data.get("dataTitleCustomFields", {}).get("rows", [])
-            for row in rows:
-                value = row.get("cells", [{}])[0].get("value", "")
-                if "поверки" in value.lower():
-                    poverka_text = re.sub(r"<[^>]+>", "", value)
-                    if ": " in poverka_text:
-                        poverka_date = poverka_text.split(": ", 1)[1].rstrip(".")
-                    break
+            # Дата поверки из координатора!
+            poverka_date = meter_data.get("poverka_date", "Не указана")
 
             # Дата последнего показания
             last_date = "Неизвестно"

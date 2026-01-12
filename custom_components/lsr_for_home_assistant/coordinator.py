@@ -323,6 +323,24 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             if last_value_raw and last_date:
                 history_dict[last_date] = float(last_value_raw.replace(",", "."))
 
+            # Дата поверки
+                poverka_date = "Не указана"
+                rows = meter.get("dataTitleCustomFields", {}).get("rows", [])
+                if len(rows) >= 3:
+                    third_row = rows[2]
+                    cells = third_row.get("cells", [])
+                    if cells:
+                        cell_value = cells[0].get("value", "")
+                        if cell_value:
+                            clean_text = re.sub(r"<[^>]+>", "", cell_value).strip()
+                            if ":" in clean_text:
+                                parts = clean_text.split(":", 1)
+                                if len(parts) == 2:
+                                    date_part = parts[1].strip().rstrip(".")
+                                    if re.match(r"^\d{2}\.\d{2}\.\d{4}$", date_part):
+                                        poverka_date = date_part
+                                        _LOGGER.debug("Найдена дата поверки для %s: %s", meter_id, poverka_date)
+
             meters_history[meter_id] = {
                 "title": object_id.get("title", "Unknown"),
                 "type_id": meter.get("type", {}).get("id"),
@@ -331,6 +349,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                     history_dict.items(),
                     key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"),
                 ),
+                "poverka_date": poverka_date
             }
 
         # -------- НАЧИСЛЕНИЯ / ЛИЦЕВОЙ СЧЁТ --------
