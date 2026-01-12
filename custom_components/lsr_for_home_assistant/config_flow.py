@@ -1,4 +1,4 @@
-# Version: 1.2.0
+# Version: 1.2.1
 """Config flow for LSR integration."""
 
 import logging
@@ -6,6 +6,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_SCAN_INTERVAL
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import selector
 import voluptuous as vol
 import uuid
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -47,7 +48,15 @@ class LSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=vol.Schema({
                     vol.Required(CONF_USERNAME): str,
                     vol.Required(CONF_PASSWORD): str,
-                    vol.Optional(CONF_SCAN_INTERVAL, default=12): vol.Coerce(float),
+                    vol.Optional(CONF_SCAN_INTERVAL, default=12): selector({
+                        "number": {
+                            "min": 1,
+                            "max": 12,
+                            "step": 1,
+                            "mode": "box",  # поле с +/− кнопками or slider
+                            "unit_of_measurement": "ч"  # единица рядом с числом
+                        }
+                    }),
                 }),
                 errors={},
             )
@@ -64,7 +73,15 @@ class LSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=vol.Schema({
                     vol.Required(CONF_USERNAME): str,
                     vol.Required(CONF_PASSWORD): str,
-                    vol.Optional(CONF_SCAN_INTERVAL, default=12): vol.Coerce(float),
+                    vol.Optional(CONF_SCAN_INTERVAL, default=12): selector({
+                        "number": {
+                            "min": 1,
+                            "max": 12,
+                            "step": 1,
+                            "mode": "box",
+                            "unit_of_measurement": "ч"
+                        }
+                    }),
                 }),
                 errors=errors,
             )
