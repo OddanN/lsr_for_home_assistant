@@ -36,8 +36,9 @@ async def async_setup_entry(
     sensor_types = {
         "address": {"name": "address", "friendly_name": "Адрес", "icon": "mdi:home", "state_class": None},
         "personal-account-number": {"name": "personal_account_number", "friendly_name": "№ л\с",
-                             "icon": "mdi:card-account-details-outline", "state_class": None},
-        "payment-status": {"name": "payment_status", "friendly_name": "Статус оплаты", "icon": "mdi:cash", "state_class": None},
+                                    "icon": "mdi:card-account-details-outline", "state_class": None},
+        "payment-status": {"name": "payment_status", "friendly_name": "Статус оплаты", "icon": "mdi:cash",
+                           "state_class": None},
         "notification-count": {"name": "notification_count", "friendly_name": "Уведомления", "icon": "mdi:bell",
                                "state_class": "measurement"},
         "camera-count": {"name": "camera_count", "icon": "mdi:camera", "state_class": "measurement"}
@@ -93,16 +94,35 @@ async def async_setup_entry(
         meters = account_data.get("meters", {})
         meter_count = len(meters)
 
-        # Собираем список названий всех счётчиков для атрибута
-        all_meters_list = []
+        # Собираем отдельные атрибуты для каждого счётчика
+        extra_attributes = {
+            "count": meter_count,
+        }
+
         for meter_id, meter_data in meters.items():
             title = meter_data.get("title", "Без названия")
-            meter_type_title = meter_data.get("type_title", "Неизвестно")
-            meter_str = f"{title} ({meter_type_title})"
-            all_meters_list.append(meter_str)
-        _LOGGER.debug("Собрано all_meters для %s: all_meters_list - %s, meters - %s", account_id, all_meters_list, meters)
+            type_title = meter_data.get("type_title", "Неизвестно")
 
-        # Создаём сенсор количества
+            # Текущее значение
+            history = meter_data.get("history", [])
+            current_value = history[-1][1] if history else 0.0
+
+            # Единицы измерения
+            unit = "м³" if meter_data.get("type_id") in ("HotWater", "ColdWater") else \
+                "Гкал" if meter_data.get("type_id") == "Heating" else ""
+
+            # Формируем безопасный ключ: убираем №, пробелы → подчёркивания, приводим к нижнему регистру
+            safe_key = (
+                title.replace("№", "N")
+                .replace(" ", "_")
+                .replace("№", "")
+                .lower()
+            )
+
+            # Добавляем атрибут вида meter_хвс_на_гвс_8358216 = "126.1608 м³"
+            extra_attributes[f"meter_{safe_key}"] = f"{current_value:.4f} {unit}"
+
+        # Создаём сенсор
         meter_count_entity_id = f"sensor.lsr_{entity_suffix}_meter_count".lower().replace("-", "_")
         entities.append(
             LSRSensor(
@@ -116,11 +136,9 @@ async def async_setup_entry(
                 entity_id=meter_count_entity_id,
                 unique_id=meter_count_entity_id,
                 state_class="measurement",
+                unit_of_measurement="шт",
                 friendly_name="Счётчиков всего",
-                extra_attributes={
-                    "all_meters": all_meters_list,
-                    "count": meter_count,
-                }
+                extra_attributes=extra_attributes
             )
         )
 
@@ -152,18 +170,19 @@ async def async_setup_entry(
 
             type_id = meter_data.get("type_id")
             if type_id in ("HotWater", "ColdWater"):
-                unit = "m³" # ← английская "m³"
+                unit = "m³"  # ← английская "m³"
                 device_class = SensorDeviceClass.VOLUME
-                state_class = "total_increasing"    # ← накопительное значение!
+                state_class = "total_increasing"  # ← накопительное значение!
             elif type_id == "Heating":
-                unit = "Gcal"   # ← стандартная для Гкал
+                unit = "Gcal"  # ← стандартная для Гкал
                 device_class = SensorDeviceClass.ENERGY
                 state_class = "total_increasing"
             elif type_id == "Electricity":
                 unit = "kWh"
                 device_class = SensorDeviceClass.ENERGY
                 state_class = "total_increasing"
-            _LOGGER.debug("meter unit_of_measurement %s: type_id=%s, unit=%s, device_class=%s, state_class=%s", meter_id, type_id, unit, device_class, state_class)
+            _LOGGER.debug("meter unit_of_measurement %s: type_id=%s, unit=%s, device_class=%s, state_class=%s",
+                          meter_id, type_id, unit, device_class, state_class)
 
             # Тип счётчика для атрибутов
             meter_type_title = meter_data.get("type_title", "Неизвестно")
@@ -475,7 +494,7 @@ class LSRSensor(SensorEntity):
             "communalrequest-count-waitingforregistration",
             "meter-count"
         ]:
-            self._attr_entity_registry_enabled_default = False   # ← отключены по умолчанию
+            self._attr_entity_registry_enabled_default = False  # ← отключены по умолчанию
         else:
             self._attr_entity_registry_enabled_default = True
 
@@ -498,8 +517,8 @@ class LSRSensor(SensorEntity):
             self._attr_entity_category = None
 
         elif (
-            self._sensor_type in DIAGNOSTIC_TYPES
-            or self._sensor_type.startswith(DIAGNOSTIC_PREFIXES)
+                self._sensor_type in DIAGNOSTIC_TYPES
+                or self._sensor_type.startswith(DIAGNOSTIC_PREFIXES)
         ):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
