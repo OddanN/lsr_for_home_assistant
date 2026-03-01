@@ -98,6 +98,10 @@ logger:
   logs:
     custom_components.lsr_for_home_assistant: debug
 ```
+## Acknowledgements
+
+Thanks to [fuCtor](https://gist.github.com/fuCtor) for the help.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
