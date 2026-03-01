@@ -6,7 +6,7 @@
 ![License](https://img.shields.io/github/license/OddanN/lsr_for_home_assistant?style=flat-square)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
 
-The LSR Integration allows you to connect your Home Assistant instance to the LSR (Leader-Smart Realty) system, providing access to communal account data, camera streams, and meter readings. This integration supports authentication via the LSR API and offers sensor entities for monitoring account status, notifications, and meter values.
+The LSR Integration allows you to connect your Home Assistant instance to the [LSR](https://www.lsr.ru/), providing access to communal account data, camera streams, and meter readings. This integration supports authentication via the LSR API and offers sensor entities for monitoring account status, notifications, and meter values.
 
 ## Installation
 
@@ -36,19 +36,38 @@ After successful authentication, the integration will automatically set up senso
 ## Usage
 
 ### Entities
-Once configured, the following entities will be available:
+Once configured, the following entities will be available. Entity IDs use a `<suffix>` based on the personal account
+number (if present) or the last 8 characters of the account ID.
 
 - **Sensors**:
-  - `sensor.lsr_<account_id>_account_address`: Displays the address of the communal account.
-  - `sensor.lsr_<account_id>_payment_status`: Shows the payment status.
-  - `sensor.lsr_<account_id>_notification_count`: Number of pending notifications.
-  - `sensor.lsr_<account_id>_camera_count`: Number of associated cameras.
-  - `sensor.lsr_<account_id>_meter_<number>_value`: Current reading of a specific meter.
-  - `sensor.lsr_<account_id>_meter_<number>_title`: Meter title.
-  - `sensor.lsr_<account_id>_meter_<number>_poverka`: Meter verification date.
+  - `sensor.lsr_<suffix>_address`: Displays the address of the communal account.
+  - `sensor.lsr_<suffix>_personal_account_number`: Personal account number.
+  - `sensor.lsr_<suffix>_payment_status`: Payment status.
+  - `sensor.lsr_<suffix>_notification_count`: Number of pending notifications.
+  - `sensor.lsr_<suffix>_camera_count`: Number of associated cameras.
+  - `sensor.lsr_<suffix>_last_refresh`: Timestamp of the last refresh.
+  - `sensor.lsr_<suffix>_meter_count`: Total number of meters. Includes extra attributes with the latest values
+    for each meter.
+  - `sensor.lsr_<suffix>_meter_<number>_value`: Current reading of a specific meter. Attributes include:
+    `title`, `meter_type`, `poverka_date`, `last_update`, `meter_id`.
+  - `sensor.lsr_<suffix>_communalrequest_count_total`: Total communal requests. Attributes include counters by status:
+    `done`, `atwork`, `onhold`, `waiting`.
+  - `sensor.lsr_<suffix>_communalrequest_count_done`: Communal requests with status Done.
+  - `sensor.lsr_<suffix>_communalrequest_count_atwork`: Communal requests with status AtWork.
+  - `sensor.lsr_<suffix>_communalrequest_count_onhold`: Communal requests with status OnHold.
+  - `sensor.lsr_<suffix>_communalrequest_count_waitingforregistration`: Communal requests waiting for registration.
+  - `sensor.lsr_<suffix>_payment_due`: Amount of the latest accrual. Attributes include month-based amounts.
+  - `sensor.lsr_<suffix>_skud`: Main SKUD PIN code. Attributes include guest passes and main pass metadata.
+
+- **Numbers**:
+  - `number.lsr_<suffix>_scan_interval`: Scan interval in hours (1-12).
+
+- **Buttons**:
+  - `button.lsr_<suffix>_force_update`: Force update of sensor data.
 
 - **Cameras**:
-  - `camera.lsr_<account_id>_cam_<camera_id>`: Live stream from LSR cameras (if available).
+  - `camera.lsr_<suffix>_camera_<camera_id>`: Live stream from LSR cameras (if available).
+  - `camera.lsr_<suffix>_mainpass_qr`: QR code of the main pass (if available).
 
 ### Example Automation
 Create an automation to notify you when a new notification is detected:

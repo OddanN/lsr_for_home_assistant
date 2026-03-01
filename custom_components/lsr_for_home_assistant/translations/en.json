@@ -9,5 +9,12 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "last_refresh": {
+        "name": "Last refresh time"
+      }
+    }
   }
 }

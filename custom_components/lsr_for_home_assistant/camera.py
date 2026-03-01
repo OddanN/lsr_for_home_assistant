@@ -2,6 +2,8 @@
 """Custom component for LSR integration, providing camera entities."""
 
 import logging
+import inspect
+import types
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -113,7 +115,7 @@ class LSRCamera(Camera):
             manufacturer="ЛСР",
             model="Communal Account",
         )
-        self._attr_entity_registry_enabled_default = True
+        self._attr_entity_registry_enabled_default = False
         _LOGGER.debug(
             "Initialized camera %s with unique_id %s, entity_id=%s, stream_url: %s",
             self._attr_name, self._attr_unique_id, entity_id, self._stream_url
@@ -149,8 +151,47 @@ class LSRCamera(Camera):
         _LOGGER.debug("Providing stream source for %s: %s", self._attr_unique_id, self._stream_url)
         return self._stream_url if self._stream_url else None
 
-    async def async_create_stream(self):
+    @property
+    def dynamic_stream_settings(self):
+        return self._build_dynamic_stream_settings()
+
+    def _build_dynamic_stream_settings(self):
+        dynamic_stream_settings = None
+        try:
+            from homeassistant.components.stream import DynamicStreamSettings
+
+            try:
+                dynamic_stream_settings = DynamicStreamSettings(
+                    preload_stream=self._attr_preload_stream
+                )
+            except TypeError:
+                dynamic_stream_settings = DynamicStreamSettings()
+                if hasattr(dynamic_stream_settings, "preload_stream"):
+                    dynamic_stream_settings.preload_stream = self._attr_preload_stream
+        except Exception as err:
+            _LOGGER.debug("Failed to build DynamicStreamSettings: %s", err)
+            dynamic_stream_settings = types.SimpleNamespace(
+                preload_stream=self._attr_preload_stream
+            )
+        return dynamic_stream_settings
+
+    async def async_create_stream(self, dynamic_stream_settings=None):
         """Create a stream."""
+        try:
+            base_create_stream = getattr(super(), "async_create_stream", None)
+            if base_create_stream is not None:
+                try:
+                    base_params = inspect.signature(base_create_stream).parameters
+                    if "dynamic_stream_settings" in base_params:
+                        return await base_create_stream(
+                            dynamic_stream_settings=dynamic_stream_settings
+                        )
+                    return await base_create_stream()
+                except Exception as err:
+                    _LOGGER.debug("Base async_create_stream failed: %s", err)
+        except Exception as err:
+            _LOGGER.debug("Base async_create_stream lookup failed: %s", err)
+
         try:
             # В Home Assistant 2025 API мог измениться
             # Попробуем разные варианты импорта
@@ -160,13 +201,22 @@ class LSRCamera(Camera):
                 return None
 
             if self._stream is None:
-                self._stream = create_stream(
-                    self.hass,
-                    self._stream_url,
-                    options={
-                        "use_wallclock_as_timestamps": True,
+                create_stream_params = inspect.signature(create_stream).parameters
+                kwargs = {}
+                if "dynamic_stream_settings" in create_stream_params:
+                    if dynamic_stream_settings is None:
+                        dynamic_stream_settings = self._build_dynamic_stream_settings()
+                    kwargs["dynamic_stream_settings"] = dynamic_stream_settings
+                if "options" in create_stream_params:
+                    kwargs["options"] = {
+                        "use_wallclock_as_timestamps": False,
                     }
-                )
+                stream = create_stream(self.hass, self._stream_url, **kwargs)
+                if inspect.isawaitable(stream):
+                    stream = await stream
+                if getattr(stream, "dynamic_stream_settings", None) is None:
+                    stream.dynamic_stream_settings = self._build_dynamic_stream_settings()
+                self._stream = stream
                 _LOGGER.debug("Stream created for %s", self._attr_unique_id)
         except ImportError as err:
             _LOGGER.debug("First import method failed: %s", err)
@@ -175,13 +225,22 @@ class LSRCamera(Camera):
                 from homeassistant.components.stream import async_create_stream as create_stream
 
                 if self._stream is None:
-                    self._stream = create_stream(
-                        self.hass,
-                        self._stream_url,
-                        options={
-                            "use_wallclock_as_timestamps": True,
+                    create_stream_params = inspect.signature(create_stream).parameters
+                    kwargs = {}
+                    if "dynamic_stream_settings" in create_stream_params:
+                        if dynamic_stream_settings is None:
+                            dynamic_stream_settings = self._build_dynamic_stream_settings()
+                        kwargs["dynamic_stream_settings"] = dynamic_stream_settings
+                    if "options" in create_stream_params:
+                        kwargs["options"] = {
+                            "use_wallclock_as_timestamps": False,
                         }
-                    )
+                    stream = create_stream(self.hass, self._stream_url, **kwargs)
+                    if inspect.isawaitable(stream):
+                        stream = await stream
+                    if getattr(stream, "dynamic_stream_settings", None) is None:
+                        stream.dynamic_stream_settings = self._build_dynamic_stream_settings()
+                    self._stream = stream
                     _LOGGER.debug("Stream created (alt import) for %s", self._attr_unique_id)
             except ImportError as err2:
                 _LOGGER.error("Cannot import stream creation function: %s", err2)
@@ -244,7 +303,7 @@ class LSRMainPassQRCamera(Camera):
             manufacturer="ЛСР",
             model="Communal Account",
         )
-        self._attr_entity_registry_enabled_default = True
+        self._attr_entity_registry_enabled_default = False
         _LOGGER.debug(
             "Initialized QR camera %s with unique_id %s, entity_id=%s, qr_url: %s",
             self._attr_name, self._attr_unique_id, entity_id, self._qr_url
