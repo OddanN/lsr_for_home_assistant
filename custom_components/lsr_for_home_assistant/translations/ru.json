@@ -24,5 +24,6 @@
     "abort": {
       "already_configured": "Этот аккаунт уже добавлен"
     }
-  }
+  },
+  "entity": {}
 }

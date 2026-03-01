@@ -1,4 +1,8 @@
-# Version: 1.2.0
+# Version: 1.3.0
+# pylint: disable=import-error,too-many-locals,too-many-branches,too-many-statements
+# pylint: disable=too-many-nested-blocks,line-too-long,mixed-line-endings
+# pylint: disable=broad-exception-caught,raise-missing-from,too-many-arguments,too-many-positional-arguments
+# pylint: disable=too-many-return-statements
 """Custom component for LSR integration, managing data updates and authentication."""
 
 from datetime import timedelta, datetime
@@ -14,6 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, NAMESPACE
 from .api_client import (
@@ -32,6 +37,94 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_SCAN_INTERVAL = timedelta(hours=12)
 
 
+def _coerce_scan_interval(raw_value) -> timedelta:
+    """Normalize scan interval value to timedelta.
+
+    Accepts timedelta, numbers in hours, or legacy seconds.
+    """
+    if raw_value is None:
+        return DEFAULT_SCAN_INTERVAL
+    if isinstance(raw_value, timedelta):
+        return raw_value
+    if isinstance(raw_value, str):
+        try:
+            raw_value = float(raw_value)
+        except ValueError:
+            return DEFAULT_SCAN_INTERVAL
+    if isinstance(raw_value, (int, float)):
+        # Legacy entries stored seconds (e.g. 43200). New config uses hours (1..12).
+        if raw_value > 24:
+            return timedelta(seconds=raw_value)
+        return timedelta(hours=raw_value)
+    return DEFAULT_SCAN_INTERVAL
+
+
+def _parse_account_fields(account: Dict, account_id: str) -> Dict:
+    """Parse address and account identifiers from account payload."""
+    try:
+        addr_match = re.search(
+            r"<span[^>]*>(.*?)</span>",
+            account["customFields"]["rows"][0]["cells"][0]["value"],
+            re.DOTALL,
+        )
+        ls_match = re.search(r"Л/с №(\d+)", account["objectId"]["title"])
+
+        parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
+        parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
+
+        personal_account_number = (
+            parsed_personal_account
+            if parsed_personal_account != "Л/с не найден"
+            else account_id[-8:]
+        )
+
+        account_title = account["objectId"]["title"]
+
+        _LOGGER.debug(
+            "Извлечено в цикле: Адрес=%s | Л/с=%s",
+            parsed_address,
+            parsed_personal_account,
+        )
+    except Exception as exc:
+        _LOGGER.warning(
+            "Ошибка парсинга адреса/л/с для %s: %s",
+            account_id,
+            exc,
+        )
+        parsed_address = "Ошибка"
+        personal_account_number = account_id[-8:]
+        account_title = f"Л/с №{account_id}"
+
+    return {
+        "address": parsed_address,
+        "personal_account_number": personal_account_number,
+        "account_title": account_title,
+    }
+
+
+def _extract_poverka_date(meter: Dict):
+    """Extract verification date from meter payload."""
+    rows = meter.get("dataTitleCustomFields", {}).get("rows", [])
+    if len(rows) < 3:
+        return None
+    cells = rows[2].get("cells", [])
+    if not cells:
+        return None
+    cell_value = cells[0].get("value", "")
+    if not cell_value:
+        return None
+    clean_text = re.sub(r"<[^>]+>", "", cell_value).strip()
+    if ":" not in clean_text:
+        return None
+    parts = clean_text.split(":", 1)
+    if len(parts) != 2:
+        return None
+    date_part = parts[1].strip().rstrip(".")
+    if re.match(r"^\d{2}\.\d{2}\.\d{4}$", date_part):
+        return date_part
+    return None
+
+
 class LSRDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching LSR data."""
 
@@ -43,65 +136,28 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
         self.refresh_token = None
         self.accounts = []
         self.app_instance_id = str(uuid.uuid4().hex[:16])
-        scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        if isinstance(scan_interval, (int, float)):
-            scan_interval = timedelta(hours=scan_interval)
+        scan_interval = _coerce_scan_interval(
+            entry.options.get(CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL))
+        )
         _LOGGER.debug("Scan interval: %s", scan_interval)
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=scan_interval)
 
     async def _async_update_data(self) -> Dict:
         """Update data via API."""
         try:
+            refreshed_at = dt_util.utcnow()
             await self._authenticate()
             accounts_data = await get_accounts(self.session, self.access_token)
             _LOGGER.debug("accounts_data: %s", accounts_data)
             detailed_data = {}
             for account in accounts_data:
-                _LOGGER.debug("account: %s", account)
-                account_id = account["objectId"]["id"]
-
-                # Сохраняем важные поля из списка аккаунтов
-                original_data = {
-                    "notification_count": account.get("notificationCount", 999),
-                }
-
-                # Извлекаем адрес и л/с прямо здесь
-                try:
-                    addr_match = re.search(
-                        r'<span[^>]*>(.*?)</span>',
-                        account["customFields"]["rows"][0]["cells"][0]["value"],
-                        re.DOTALL
-                    )
-                    ls_match = re.search(r"Л/с №(\d+)", account["objectId"]["title"])
-
-                    parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
-                    parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
-
-                    # Чистый номер только цифры (для entity_id)
-                    personal_account_number = parsed_personal_account if parsed_personal_account != "Л/с не найден" else account_id[
-                        -8:]
-
-                    # Полный title для имени устройства
-                    account_title = account["objectId"]["title"]  # "Л/с №100000002184"
-
-                    _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
-
-                except Exception as e:
-                    _LOGGER.warning("Ошибка парсинга адреса/л/с для %s: %s", account_id, e)
-                    parsed_address = "Ошибка"
-                    parsed_personal_account = "Ошибка"
-
-                account_data = await self.async_fetch_account_data(account_id, include_cameras=True,
-                                                                   include_main_pass=True, include_guest_passes=True)
-
-                # Добавляем сохранённые поля в результат
-                account_data.update(original_data)
-
-                # Добавляем спарсенные значения в результат
-                account_data["address"] = parsed_address
-                account_data["personal_account_number"] = personal_account_number
-                account_data["account_title"] = account_title
-
+                account_id, account_data, _ = await self._build_account_data(
+                    account,
+                    include_cameras=True,
+                    include_main_pass=True,
+                    include_guest_passes=True,
+                    refreshed_at=refreshed_at,
+                )
                 detailed_data[account_id] = account_data
             _LOGGER.debug("Fetched data: %s", detailed_data)
             return detailed_data
@@ -112,63 +168,58 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_force_update_sensors(self) -> None:
         """Force update of sensor data (excluding cameras) by re-authenticating and fetching new data."""
         try:
+            refreshed_at = dt_util.utcnow()
             await self._authenticate()
             accounts_data = await get_accounts(self.session, self.access_token)
             _LOGGER.debug("accounts_data: %s", accounts_data)
             detailed_data = {}
             for account in accounts_data:
-                _LOGGER.debug("account: %s", account)
-                account_id = account["objectId"]["id"]
-
-                # Сохраняем важные поля из списка аккаунтов
-                original_data = {
-                    "notification_count": account.get("notificationCount", 999),
-                }
-
-                # Извлекаем адрес и л/с прямо здесь
-                try:
-                    addr_match = re.search(
-                        r'<span[^>]*>(.*?)</span>',
-                        account["customFields"]["rows"][0]["cells"][0]["value"],
-                        re.DOTALL
-                    )
-                    ls_match = re.search(r"Л/с №(\d+)", account["objectId"]["title"])
-
-                    parsed_address = addr_match.group(1).strip() if addr_match else "Адрес не распознан"
-                    parsed_personal_account = ls_match.group(1) if ls_match else "Л/с не найден"
-
-                    # Чистый номер только цифры (для entity_id)
-                    personal_account_number = parsed_personal_account if parsed_personal_account != "Л/с не найден" else account_id[
-                        -8:]
-
-                    # Полный title для имени устройства
-                    account_title = account["objectId"]["title"]  # "Л/с №100000002184"
-
-                    _LOGGER.debug("Извлечено в цикле: Адрес=%s | Л/с=%s", parsed_address, parsed_personal_account)
-
-                except Exception as e:
-                    _LOGGER.warning("Ошибка парсинга адреса/л/с для %s: %s", account_id, e)
-                    parsed_address = "Ошибка"
-                    parsed_personal_account = "Ошибка"
-
-                account_data = await self.async_fetch_account_data(account_id, include_cameras=False,
-                                                                   include_main_pass=False, include_guest_passes=False)
-
-                # Добавляем сохранённые поля в результат
-                account_data.update(original_data)
-
-                # Добавляем спарсенные значения в результат
-                account_data["address"] = parsed_address
-                account_data["personal_account"] = parsed_personal_account
-                account_data["personal_account_number"] = personal_account_number
-                account_data["account_title"] = account_title
-
+                account_id, account_data, parsed_fields = await self._build_account_data(
+                    account,
+                    include_cameras=False,
+                    include_main_pass=False,
+                    include_guest_passes=False,
+                    refreshed_at=refreshed_at,
+                )
+                account_data["personal_account"] = parsed_fields["personal_account_number"]
                 detailed_data[account_id] = account_data
-            self.data = detailed_data
+            self.async_set_updated_data(detailed_data)
             _LOGGER.debug("Force updated sensor data: %s", self.data)
         except Exception as err:
             _LOGGER.error("Error during force update of sensor data: %s", err)
             raise UpdateFailed(f"Error during force update: {err}") from err
+
+    async def _build_account_data(
+        self,
+        account: Dict,
+        include_cameras: bool,
+        include_main_pass: bool,
+        include_guest_passes: bool,
+        refreshed_at,
+    ):
+        _LOGGER.debug("account: %s", account)
+        account_id = account["objectId"]["id"]
+
+        original_data = {
+            "notification_count": account.get("notificationCount", 999),
+        }
+
+        parsed_fields = _parse_account_fields(account, account_id)
+
+        account_data = await self.async_fetch_account_data(
+            account_id,
+            include_cameras=include_cameras,
+            include_main_pass=include_main_pass,
+            include_guest_passes=include_guest_passes,
+        )
+
+        account_data.update(original_data)
+        account_data["address"] = parsed_fields["address"]
+        account_data["personal_account_number"] = parsed_fields["personal_account_number"]
+        account_data["account_title"] = parsed_fields["account_title"]
+        account_data["last_refresh"] = refreshed_at
+
+        return account_id, account_data, parsed_fields
 
     async def _authenticate(self) -> None:
         """Authenticate and get access token."""
@@ -275,6 +326,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
         meters_history = {}
 
         for meter in meters_data:
+            poverka_date = "Не указана"
             _LOGGER.debug("meter: %s", meter)
 
             object_id = meter.get("objectId")
@@ -305,22 +357,9 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
                 history_dict[last_date] = float(last_value_raw.replace(",", "."))
 
             # Дата поверки
-                poverka_date = "Не указана"
-                rows = meter.get("dataTitleCustomFields", {}).get("rows", [])
-                if len(rows) >= 3:
-                    third_row = rows[2]
-                    cells = third_row.get("cells", [])
-                    if cells:
-                        cell_value = cells[0].get("value", "")
-                        if cell_value:
-                            clean_text = re.sub(r"<[^>]+>", "", cell_value).strip()
-                            if ":" in clean_text:
-                                parts = clean_text.split(":", 1)
-                                if len(parts) == 2:
-                                    date_part = parts[1].strip().rstrip(".")
-                                    if re.match(r"^\d{2}\.\d{2}\.\d{4}$", date_part):
-                                        poverka_date = date_part
-                                        _LOGGER.debug("Найдена дата поверки для %s: %s", meter_id, poverka_date)
+            poverka_date = _extract_poverka_date(meter) or poverka_date
+            if poverka_date != "Не указана":
+                _LOGGER.debug("Найдена дата поверки для %s: %s", meter_id, poverka_date)
 
             meters_history[meter_id] = {
                 "title": object_id.get("title", "Unknown"),
@@ -338,6 +377,7 @@ class LSRDataUpdateCoordinator(DataUpdateCoordinator):
             item for item in account_data.get("items", [])
             if item.get("communalAccount", {}).get("title")
         ]
+        accruals.sort(key=lambda item: item.get("date", 0), reverse=True)
 
         communal_account = next(
             (item["communalAccount"] for item in accruals),

@@ -1,4 +1,7 @@
-# Version: 1.2.0
+# Version: 1.3.0
+# pylint: disable=import-error,too-many-locals,too-many-branches,too-many-statements
+# pylint: disable=too-many-instance-attributes,too-many-arguments,too-many-positional-arguments
+# pylint: disable=line-too-long,mixed-line-endings
 """Custom component for LSR integration, providing sensor entities."""
 
 import logging
@@ -10,12 +13,37 @@ from homeassistant.components.sensor import SensorEntity, EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.sensor import SensorStateClass, SensorDeviceClass
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import LSRDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _strip_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text or "")
+
+
+def _extract_amount_from_accrual(accrual) -> float:
+    """Extract начислено amount from listFields; return 0.0 if not found."""
+    rows = accrual.get("listFields", {}).get("rows", [])
+    for row in rows:
+        for cell in row.get("cells", []):
+            text = _strip_html(cell.get("value", "")).strip()
+            match = re.search(r"Начислено\s*([\d.,]+)", text)
+            if match:
+                return float(match.group(1).replace(",", "."))
+    # Fallback: first numeric value in listFields (if format changes)
+    for row in rows:
+        for cell in row.get("cells", []):
+            text = _strip_html(cell.get("value", "")).strip()
+            match = re.search(r"([\d]+[.,]\d+)", text)
+            if match:
+                return float(match.group(1).replace(",", "."))
+    return 0.0
 
 
 async def async_setup_entry(
@@ -35,13 +63,16 @@ async def async_setup_entry(
 
     sensor_types = {
         "address": {"name": "address", "friendly_name": "Адрес", "icon": "mdi:home", "state_class": None},
-        "personal-account-number": {"name": "personal_account_number", "friendly_name": "№ л\с",
+        "personal-account-number": {"name": "personal_account_number", "friendly_name": "№ л/с",
                                     "icon": "mdi:card-account-details-outline", "state_class": None},
         "payment-status": {"name": "payment_status", "friendly_name": "Статус оплаты", "icon": "mdi:cash",
                            "state_class": None},
         "notification-count": {"name": "notification_count", "friendly_name": "Уведомления", "icon": "mdi:bell",
                                "state_class": "measurement"},
-        "camera-count": {"name": "camera_count", "icon": "mdi:camera", "state_class": "measurement"}
+        "camera-count": {"name": "camera_count", "icon": "mdi:camera", "state_class": "measurement"},
+        "last-refresh": {"name": "last_refresh", "friendly_name": "Время последнего опроса",
+                         "icon": "mdi:clock-check", "state_class": None,
+                         "device_class": SensorDeviceClass.TIMESTAMP}
     }
 
     for account_id, account_data in coordinator.data.items():
@@ -53,8 +84,8 @@ async def async_setup_entry(
         _LOGGER.debug("notification_count → %s", account_data.get("notification_count"))
         _LOGGER.debug("Полный account_data (первые 1000 символов): %s", str(account_data))
 
-        NUMERIC_DEFAULT = 999  # для всех счётчиков и числовых сенсоров — нормальный дефолт 0
-        STRING_DEFAULT = "STRING_DEFAULT"
+        numeric_default = 999  # для всех счётчиков и числовых сенсоров — нормальный дефолт 0
+        string_default = "STRING_DEFAULT"
 
         personal_account_number = account_data.get("personal_account_number", "unknown")
         entity_suffix = personal_account_number if personal_account_number != "unknown" else account_id[-8:]
@@ -69,11 +100,14 @@ async def async_setup_entry(
                               account_id, state, len(meters))
             else:
                 # Для остальных — обычный get с правильным дефолтом
-                state = account_data.get(key, NUMERIC_DEFAULT if sensor_type in ["notification-count",
-                                                                                 "camera-count"] else STRING_DEFAULT)
+                state = account_data.get(
+                    key,
+                    numeric_default if sensor_type in ["notification-count", "camera-count"] else string_default
+                )
 
             entity_id = f"sensor.lsr_{entity_suffix}_{sensor_type}".lower().replace("-", "_")
             unique_id = entity_id
+            friendly_name = config.get("friendly_name", config["name"])
             entities.append(
                 LSRSensor(
                     hass,
@@ -86,7 +120,9 @@ async def async_setup_entry(
                     entity_id=entity_id,
                     unique_id=unique_id,
                     state_class=config.get("state_class"),
-                    friendly_name=config.get("friendly_name", config["name"])
+                    friendly_name=friendly_name,
+                    device_class=config.get("device_class"),
+                    data_key=config["name"]
                 )
             )
 
@@ -101,7 +137,6 @@ async def async_setup_entry(
 
         for meter_id, meter_data in meters.items():
             title = meter_data.get("title", "Без названия")
-            type_title = meter_data.get("type_title", "Неизвестно")
 
             # Текущее значение
             history = meter_data.get("history", [])
@@ -138,7 +173,8 @@ async def async_setup_entry(
                 state_class="measurement",
                 unit_of_measurement="шт",
                 friendly_name="Счётчиков всего",
-                extra_attributes=extra_attributes
+                extra_attributes=extra_attributes,
+                data_key="meters"
             )
         )
 
@@ -219,7 +255,8 @@ async def async_setup_entry(
                         "meter_type": meter_type_title,
                         "meter_id": meter_id,
                         "title": title,
-                    }
+                    },
+                    meter_id=meter_id
                 )
             )
 
@@ -302,7 +339,15 @@ async def async_setup_entry(
                 )
             )
 
+            if req_sensor["type"] != "communalrequest-count-total":
+                continue
+
             # New sensor for payment due
+            amount = 0.0
+            extra_attributes = {
+                "account_id": account_id,
+                "sensor_type": "payment-due"
+            }
             accruals = account_data.get("accruals", [])
             if accruals:
                 _LOGGER.debug("accruals: %s", accruals)
@@ -311,35 +356,17 @@ async def async_setup_entry(
                 latest_accrual = accruals[0]
 
                 # ---------- Сумма последнего начисления ----------
-                amount = 0.0
-                amount_cell = latest_accrual.get("listFields", {}) \
-                    .get("rows", [{}])[0] \
-                    .get("cells", [{}, {}])[1] \
-                    .get("value", "")
-
-                amount_text = re.sub(r"<[^>]+>", "", amount_cell)
-                amount_match = re.search(r"Начислено\s*([\d.,]+)", amount_text)
-                if amount_match:
-                    amount = float(amount_match.group(1).replace(",", "."))
+                amount = _extract_amount_from_accrual(latest_accrual)
 
                 # ---------- Красивые атрибуты: месяц + сумма в нужном формате ----------
-                extra_attributes = {
-                    "account_id": account_id,
-                    "sensor_type": "payment-due"
-                }
-
                 for accrual in accruals:
-                    accrual_id = accrual["objectId"]["id"]
-
                     # Дата начисления (из первой ячейки первой строки)
                     date_cell = accrual["listFields"]["rows"][0]["cells"][0]["value"]
                     date_text = re.sub(r"<[^>]+>", "", date_cell).strip()
 
                     # Сумма начисления (из второй ячейки первой строки)
-                    value_cell = accrual["listFields"]["rows"][0]["cells"][1]["value"]
-                    value_text = re.sub(r"<[^>]+>", "", value_cell).strip()
-                    value_match = re.search(r"Начислено\s*([\d.,]+)", value_text)
-                    amount_str = value_match.group(1) if value_match else "0"
+                    amount_value = _extract_amount_from_accrual(accrual)
+                    amount_str = f"{amount_value:.2f}".replace(".", ",") if amount_value else "0"
 
                     # Формируем ключ вида "Декабрь 2025"
                     month_year = date_text  # уже "Декабрь 2025" и т.п.
@@ -415,7 +442,7 @@ async def async_setup_entry(
     _LOGGER.debug("Added %s sensor entities", len(entities))
 
 
-class LSRSensor(SensorEntity):
+class LSRSensor(CoordinatorEntity, SensorEntity):
     """Representation of an LSR sensor.
 
     This class handles the creation and management of sensor entities for the LSR integration.
@@ -433,11 +460,14 @@ class LSRSensor(SensorEntity):
             entity_id: str,
             unique_id: str,
             state_class: str = None,
-            entity_category: EntityCategory = None,
+            _entity_category: EntityCategory = None,
             unit_of_measurement: str = None,
             device_class: str = None,
             extra_attributes: dict = None,
-            friendly_name: str = None
+            friendly_name: str = None,
+            data_key: str = None,
+            meter_id: str = None,
+            _translation_key: str = None,
     ) -> None:
         """Initialize the sensor.
 
@@ -456,11 +486,14 @@ class LSRSensor(SensorEntity):
             unit_of_measurement (str, optional): The unit of measurement for the sensor.
             extra_attributes (dict, optional): Additional attributes for the sensor.
         """
-        super().__init__()
+        CoordinatorEntity.__init__(self, coordinator)
+        SensorEntity.__init__(self)
         self.hass = hass
         self._coordinator = coordinator
         self._account_id = account_id
         self._sensor_type = sensor_type
+        self._data_key = data_key
+        self._meter_id = meter_id
         self._attr_unique_id = unique_id
         self.entity_id = entity_id
         self._attr_name = friendly_name if friendly_name else entity_name
@@ -492,33 +525,34 @@ class LSRSensor(SensorEntity):
             "communalrequest-count-atwork",
             "communalrequest-count-onhold",
             "communalrequest-count-waitingforregistration",
-            "meter-count"
+            "meter-count",
+            "last-refresh",
         ]:
             self._attr_entity_registry_enabled_default = False  # ← отключены по умолчанию
         else:
             self._attr_entity_registry_enabled_default = True
 
         # Автоматическое распределение по категориям Home Assistant
-        VISIBLE_TYPES = {
+        visible_types = {
             "mainpass-pin", "guestpass",
             "payment-status",
             "address", "personal-account-number"
         }
 
-        DIAGNOSTIC_TYPES = {
+        diagnostic_types = {
             "communalrequest-count-total",
             "notification-count", "camera-count",
-            "payment-due"
+            "payment-due", "last-refresh"
         }
 
-        DIAGNOSTIC_PREFIXES = ("communalrequest-count-", "meter-")
+        diagnostic_prefixes = ("communalrequest-count-", "meter-")
 
-        if self._sensor_type in VISIBLE_TYPES:
+        if self._sensor_type in visible_types:
             self._attr_entity_category = None
 
         elif (
-                self._sensor_type in DIAGNOSTIC_TYPES
-                or self._sensor_type.startswith(DIAGNOSTIC_PREFIXES)
+            self._sensor_type in diagnostic_types
+            or self._sensor_type.startswith(diagnostic_prefixes)
         ):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -557,7 +591,38 @@ class LSRSensor(SensorEntity):
         Returns:
             Union[str, int, float]: The current state of the sensor, rounded to 4 decimal places for values.
         """
-        state = self._coordinator.data.get(self._account_id, {}).get(self._sensor_type, self._state)
+        account_data = self._coordinator.data.get(self._account_id, {})
+
+        if self._sensor_type == "meter-count":
+            state = len(account_data.get("meters", {}))
+        elif self._sensor_type.startswith("communalrequest-count-"):
+            communal_requests = account_data.get("communal_requests", [])
+            if self._sensor_type == "communalrequest-count-total":
+                state = len(communal_requests)
+            elif self._sensor_type == "communalrequest-count-done":
+                state = len([req for req in communal_requests if req.get("status", {}).get("id") == "Done"])
+            elif self._sensor_type == "communalrequest-count-atwork":
+                state = len([req for req in communal_requests if req.get("status", {}).get("id") == "AtWork"])
+            elif self._sensor_type == "communalrequest-count-onhold":
+                state = len([req for req in communal_requests if req.get("status", {}).get("id") == "OnHold"])
+            elif self._sensor_type == "communalrequest-count-waitingforregistration":
+                state = len([req for req in communal_requests if req.get("status", {}).get("id") == "WaitingForRegistration"])
+            else:
+                state = 0
+        elif self._sensor_type == "payment-due":
+            accruals = account_data.get("accruals", [])
+            amount = _extract_amount_from_accrual(accruals[0]) if accruals else 0.0
+            state = amount
+        elif self._sensor_type == "skud":
+            main_pass = account_data.get("main_pass", {})
+            state = main_pass.get("pin", "РќРµС‚ РїРёРЅР°")
+        elif self._sensor_type.endswith("-value") and self._meter_id:
+            meter_data = account_data.get("meters", {}).get(self._meter_id, {})
+            history = meter_data.get("history", [])
+            state = history[-1][1] if history else 0.0
+        else:
+            key = self._data_key if self._data_key else self._sensor_type
+            state = account_data.get(key, self._state)
         if self._sensor_type in ["notification-count", "camera-count", "meter-count", "communalrequest-count-total",
                                  "communalrequest-count-done", "communalrequest-count-atwork",
                                  "communalrequest-count-onhold", "communalrequest-count-waitingforregistration",
@@ -565,6 +630,10 @@ class LSRSensor(SensorEntity):
             state = int(state) if state is not None else 998
         elif self._sensor_type.endswith("-value") or self._sensor_type == "payment-due":
             state = round(float(state) if state is not None else 0.0, 4)
+        elif self._sensor_type == "last-refresh":
+            if isinstance(state, str):
+                parsed = dt_util.parse_datetime(state)
+                state = parsed if parsed is not None else state
         elif self._sensor_type.startswith("meter-") and "-poverka" not in self._sensor_type:
             state = str(state) if state is not None else "Unknown"
         else:
@@ -579,17 +648,66 @@ class LSRSensor(SensorEntity):
         Returns:
             dict: Additional attributes for the sensor entity.
         """
+        account_data = self._coordinator.data.get(self._account_id, {})
         base_attributes = {
             "account_id": self._account_id,
             "sensor_type": self._sensor_type,
             **self._attr_extra_state_attributes,
         }
-        if self._sensor_type == "mainpass-pin":
-            main_pass = self._coordinator.data.get(self._account_id, {}).get("main_pass", {})
+        last_refresh = account_data.get("last_refresh")
+        if last_refresh:
+            base_attributes["last_refresh"] = last_refresh
+        if self._sensor_type.endswith("-value") and self._meter_id:
+            meter_data = account_data.get("meters", {}).get(self._meter_id, {})
+            history = meter_data.get("history", [])
+            last_date = history[-1][0] if history else "Неизвестно"
             base_attributes.update({
-                "text": main_pass.get("text", ""),
-                "qr": main_pass.get("qr", "")
+                "meter_id": self._meter_id,
+                "title": meter_data.get("title", "Без названия"),
+                "meter_type": meter_data.get("type_title", "Неизвестно"),
+                "poverka_date": meter_data.get("poverka_date", "Не указана"),
+                "last_update": last_date,
             })
-        elif self._sensor_type == "guestpass":
-            base_attributes.update(self._attr_extra_state_attributes or {})
+        if self._sensor_type == "payment-due":
+            accruals = account_data.get("accruals", [])
+            extra_attributes = {
+                "account_id": self._account_id,
+                "sensor_type": "payment-due",
+            }
+            for accrual in accruals:
+                date_cell = accrual["listFields"]["rows"][0]["cells"][0]["value"]
+                date_text = _strip_html(date_cell).strip()
+                amount_value = _extract_amount_from_accrual(accrual)
+                amount_str = f"{amount_value:.2f}".replace(".", ",") if amount_value else "0"
+                extra_attributes[date_text] = f"{amount_str} ₽"
+            base_attributes.update(extra_attributes)
+        elif self._sensor_type == "communalrequest-count-total":
+            communal_requests = account_data.get("communal_requests", [])
+            base_attributes.update({
+                "done": len([req for req in communal_requests if req.get("status", {}).get("id") == "Done"]),
+                "atwork": len([req for req in communal_requests if req.get("status", {}).get("id") == "AtWork"]),
+                "onhold": len([req for req in communal_requests if req.get("status", {}).get("id") == "OnHold"]),
+                "waiting": len([req for req in communal_requests if req.get("status", {}).get("id") == "WaitingForRegistration"]),
+            })
+        elif self._sensor_type == "skud":
+            main_pass = account_data.get("main_pass", {})
+            guest_passes_data = account_data.get("guest_passes", {})
+            guest_list = []
+            guest_count = guest_passes_data.get("count", 0)
+            for pass_data in guest_passes_data.get("items", []):
+                from_date = datetime.fromtimestamp(pass_data['dateFrom']).strftime('%d.%m.%Y')
+                to_date = datetime.fromtimestamp(pass_data['dateTo']).strftime('%d.%m.%Y')
+                pass_str = (
+                    f"{pass_data['strategy']['title']} | "
+                    f"{from_date}вЂ“{to_date} | "
+                    f"РџРёРЅ: {pass_data.get('pin', 'вЂ”')} | "
+                    f"QR: {pass_data.get('qr', 'вЂ”')}"
+                )
+                guest_list.append(pass_str)
+            base_attributes.update({
+                "guest_passes_count": guest_count,
+                "guest_passes": guest_list,
+                "main_pass_text": main_pass.get("text", ""),
+                "main_pass_qr": main_pass.get("qr", ""),
+            })
         return base_attributes

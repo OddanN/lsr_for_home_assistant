@@ -1,20 +1,37 @@
-# Version: 1.2.1
+# Version: 1.3.0
+# pylint: disable=import-error,wrong-import-order,ungrouped-imports,mixed-line-endings,too-few-public-methods
 """Config flow for LSR integration."""
 
+import uuid
 import logging
+
+import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_SCAN_INTERVAL
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import selector
-import voluptuous as vol
-import uuid
-from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .const import DOMAIN
 from .api_client import authenticate
 
 _LOGGER = logging.getLogger(__name__)
+
+def _build_user_schema(default_scan_interval=12):
+    return vol.Schema({
+        vol.Required(CONF_USERNAME): str,
+        vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_SCAN_INTERVAL, default=default_scan_interval): selector({
+            "number": {
+                "min": 1,
+                "max": 12,
+                "step": 1,
+                "mode": "box",
+                "unit_of_measurement": "ч",
+            }
+        }),
+    })
 
 async def validate_input(hass: HomeAssistant, data):
     """Validate the user input allows us to connect.
@@ -45,19 +62,7 @@ class LSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self.async_show_form(
                 step_id="user",
-                data_schema=vol.Schema({
-                    vol.Required(CONF_USERNAME): str,
-                    vol.Required(CONF_PASSWORD): str,
-                    vol.Optional(CONF_SCAN_INTERVAL, default=12): selector({
-                        "number": {
-                            "min": 1,
-                            "max": 12,
-                            "step": 1,
-                            "mode": "box",  # поле с +/− кнопками or slider
-                            "unit_of_measurement": "ч"  # единица рядом с числом
-                        }
-                    }),
-                }),
+                data_schema=_build_user_schema(12),
                 errors={},
             )
 
@@ -70,19 +75,7 @@ class LSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
             return self.async_show_form(
                 step_id="user",
-                data_schema=vol.Schema({
-                    vol.Required(CONF_USERNAME): str,
-                    vol.Required(CONF_PASSWORD): str,
-                    vol.Optional(CONF_SCAN_INTERVAL, default=12): selector({
-                        "number": {
-                            "min": 1,
-                            "max": 12,
-                            "step": 1,
-                            "mode": "box",
-                            "unit_of_measurement": "ч"
-                        }
-                    }),
-                }),
+                data_schema=_build_user_schema(12),
                 errors=errors,
             )
 
@@ -91,3 +84,40 @@ class LSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self.async_abort(reason="not_supported")
         return await self.async_step_user(user_input)
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        """Return the options flow handler."""
+        return LSROptionsFlow(config_entry)
+
+
+class LSROptionsFlow(config_entries.OptionsFlow):
+    """Handle LSR options."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self._config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Handle options step."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current = self._config_entry.options.get(
+            CONF_SCAN_INTERVAL,
+            self._config_entry.data.get(CONF_SCAN_INTERVAL, 12),
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_SCAN_INTERVAL, default=current): selector({
+                    "number": {
+                        "min": 1,
+                        "max": 12,
+                        "step": 1,
+                        "mode": "box",
+                        "unit_of_measurement": "ч",
+                    }
+                }),
+            }),
+        )

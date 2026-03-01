@@ -1,4 +1,5 @@
-# Version: 1.2.0
+# Version: 1.3.0
+# pylint: disable=import-error,too-few-public-methods,line-too-long,mixed-line-endings
 """Custom component for LSR integration, providing button entities."""
 
 import logging
@@ -6,6 +7,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import LSRDataUpdateCoordinator
 
@@ -14,17 +16,19 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up the LSR button platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities = [
-        LSRForceUpdateButton(hass, coordinator, entry.entry_id)
-    ]
+    entities = []
+    for account_id in coordinator.data.keys():
+        entities.append(LSRForceUpdateButton(coordinator, account_id))
     async_add_entities(entities)
     _LOGGER.debug("Added button entities")
 
-class LSRForceUpdateButton(ButtonEntity):
+class LSRForceUpdateButton(CoordinatorEntity, ButtonEntity):
     """Button to force update sensor data."""
 
-    def __init__(self, coordinator, account_id):
+    def __init__(self, coordinator: LSRDataUpdateCoordinator, account_id: str):
         """Initialize the button."""
+        CoordinatorEntity.__init__(self, coordinator)
+        ButtonEntity.__init__(self)
         self._coordinator = coordinator
         self._account_id = account_id
 
@@ -50,5 +54,5 @@ class LSRForceUpdateButton(ButtonEntity):
     async def async_press(self):
         """Handle the button press."""
         _LOGGER.debug("Forcing update of sensor data")
-        await self._coordinator.async_force_update_sensors()
+        await self._coordinator.async_refresh()
         _LOGGER.debug("Sensor data updated successfully")
