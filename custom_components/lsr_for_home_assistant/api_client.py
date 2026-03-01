@@ -263,6 +263,7 @@ async def get_camera_stream_url(session: aiohttp.ClientSession, camera: Dict, he
                 try:
                     video_data = await video_resp.json()
                     camera["stream_url"] = video_data.get("url", "")
+                    camera["frame"] = video_data.get("frame", "")
                     _LOGGER.debug("Successfully fetched stream URL for camera %s: %s", camera.get("id", "unknown"), camera["stream_url"])
                 except ValueError:
                     _LOGGER.error("Failed to parse JSON response for camera %s: Response: %s", camera.get("id", "unknown"), await video_resp.text())

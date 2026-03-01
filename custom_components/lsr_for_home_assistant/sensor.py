@@ -681,6 +681,13 @@ class LSRSensor(CoordinatorEntity, SensorEntity):
                 amount_str = f"{amount_value:.2f}".replace(".", ",") if amount_value else "0"
                 extra_attributes[date_text] = f"{amount_str} ₽"
             base_attributes.update(extra_attributes)
+        elif self._sensor_type == "camera-count":
+            cameras = account_data.get("cameras", [])
+            for camera in cameras:
+                title = camera.get("title")
+                frame_url = camera.get("frame")
+                if title and frame_url:
+                    base_attributes[title] = frame_url
         elif self._sensor_type == "communalrequest-count-total":
             communal_requests = account_data.get("communal_requests", [])
             base_attributes.update({
