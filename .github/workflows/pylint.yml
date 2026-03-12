@@ -1,0 +1,38 @@
+name: Pylint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  release:
+    types:
+      - created
+
+jobs:
+  pylint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install pylint
+        run: python -m pip install --upgrade pip pylint
+
+      - name: Run pylint
+        run: |
+          pylint --rcfile=.pylintrc custom_components/lsr_for_home_assistant | tee pylint-report.txt
+
+      - name: Upload pylint report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pylint-report
+          path: pylint-report.txt
