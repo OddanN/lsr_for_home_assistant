@@ -6,6 +6,10 @@
 ![License](https://img.shields.io/github/license/OddanN/lsr_for_home_assistant?style=flat-square)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
 
+<p align="center">
+  <img src="logo.png" alt="EIRC SPB logo" width="200">
+</p>
+
 The LSR Integration allows you to connect your Home Assistant instance to the [LSR](https://www.lsr.ru/), providing access to communal account data, camera streams, and meter readings. This integration supports authentication via the LSR API and offers sensor entities for monitoring account status, notifications, and meter values.
 
 ## Installation
